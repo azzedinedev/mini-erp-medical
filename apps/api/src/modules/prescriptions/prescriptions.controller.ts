@@ -7,6 +7,8 @@ import { JwtAuthGuard, AuthPrincipal } from '../../common/guards/jwt-auth.guard'
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { RequirePermission } from '../../common/decorators/permissions.decorator';
 import { PdfService } from '../../common/pdf/pdf.service';
+import { StorageService } from '../../common/storage/storage.service';
+import { DocumentsService } from '../documents/documents.service';
 
 type RequestWithUser = { user: AuthPrincipal };
 @ApiTags('ordonnances')
@@ -14,7 +16,7 @@ type RequestWithUser = { user: AuthPrincipal };
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('prescriptions')
 export class PrescriptionsController {
-  constructor(private readonly prescriptions: PrescriptionsService, private readonly pdf: PdfService) {}
+  constructor(private readonly prescriptions: PrescriptionsService, private readonly pdf: PdfService, private readonly storage: StorageService, private readonly documents: DocumentsService) {}
 
   @Get()
   @RequirePermission('prescriptions', 'view')
@@ -22,7 +24,7 @@ export class PrescriptionsController {
 
   @Get(':id/pdf')
   @RequirePermission('prescriptions', 'export')
-  async pdfDocument(@Param('id') id: string, @Res() response: Response): Promise<void> {
+  async pdfDocument(@Param('id') id: string, @Req() req: RequestWithUser, @Res() response: Response): Promise<void> {
     const prescription = await this.prescriptions.findForPdf(id);
     const buffer = await this.pdf.renderOfficial({
       title: 'Ordonnance électronique',
@@ -31,6 +33,8 @@ export class PrescriptionsController {
       lines: prescription.items.map((item) => ({ label: item.medication?.name ?? item.manualName ?? 'Médicament libre', value: [item.dosage, item.frequency, item.duration, item.instructions].filter(Boolean).join(' · ') })),
       traceabilityToken: prescription.verificationToken ?? prescription.code,
     });
+    const stored = await this.storage.put(`pdf/prescriptions/${prescription.code}.pdf`, buffer);
+    await this.documents.archiveGeneratedPdf({ title: prescription.code, prescriptionId: prescription.id, storageKey: stored.key, sizeBytes: stored.sizeBytes, checksum: stored.checksum, createdById: req.user.sub });
     response.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${prescription.code}.pdf"` });
     response.send(buffer);
   }
