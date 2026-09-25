@@ -1,5 +1,5 @@
 import { PrismaClient, ReferenceKind, StaffType, Gender } from '@prisma/client';
-import * as argon2 from 'argon2';
+import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 const permissionActions = ['view', 'create', 'update', 'delete', 'archive', 'export'];
