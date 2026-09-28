@@ -1,0 +1,34 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mediflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mediflow
+      POSTGRES_USER: mediflow
+      POSTGRES_PASSWORD: mediflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - mediflow-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mediflow -d mediflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  minio:
+    image: minio/minio:latest
+    container_name: mediflow-minio
+    command: server /data --console-address ":9001"
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: mediflow
+      MINIO_ROOT_PASSWORD: mediflow-storage
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - mediflow-minio:/data
+volumes:
+  mediflow-postgres:
+  mediflow-minio:

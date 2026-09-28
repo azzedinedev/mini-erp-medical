@@ -1,0 +1,4 @@
+{
+  "common": { "search": "بحث", "save": "حفظ", "cancel": "إلغاء", "export": "تصدير", "active": "نشط" },
+  "dashboard": { "greeting": "مرحباً، صوفيا", "subtitle": "إليك ما يحدث في عيادتك اليوم.", "overview": "نظرة عامة" }
+}

@@ -1,0 +1,4 @@
+{
+  "common": { "search": "Search", "save": "Save", "cancel": "Cancel", "export": "Export", "active": "Active" },
+  "dashboard": { "greeting": "Good morning, Sofia", "subtitle": "Here is what is happening in your clinic today.", "overview": "Overview" }
+}

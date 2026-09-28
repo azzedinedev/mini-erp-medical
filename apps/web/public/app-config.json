@@ -1,0 +1,7 @@
+{
+  "appName": "MediFlow",
+  "appTagline": "Le soin, orchestré simplement.",
+  "logoPath": "/icons/mediflow-mark.svg",
+  "defaultLanguage": "fr",
+  "defaultTheme": "light"
+}
