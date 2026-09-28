@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 export interface StoredObject {
@@ -28,5 +28,12 @@ export class StorageService {
     await mkdir(path.dirname(target), { recursive: true });
     await writeFile(target, content);
     return { key, sizeBytes: content.byteLength, checksum, driver: 'local' };
+  }
+
+  async get(key: string): Promise<Buffer> {
+    const root = path.resolve(this.config.get<string>('app.storagePath') ?? './storage');
+    const target = path.resolve(root, key);
+    if (!target.startsWith(`${root}${path.sep}`)) throw new Error('Invalid storage key');
+    return readFile(target);
   }
 }
