@@ -1,0 +1,30 @@
+{
+  "name": "mediflow-clinic-erp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mini-ERP clinique modulaire pour la gestion des dossiers patients et des opérations terrain.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=@mediflow/web",
+    "dev:api": "npm run start:dev --workspace=@mediflow/api",
+    "dev:desktop": "npm run dev --workspace=@mediflow/desktop",
+    "build": "npm run build --workspaces --if-present",
+    "build:web": "npm run build --workspace=@mediflow/web",
+    "build:api": "npm run build --workspace=@mediflow/api",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "db:generate": "npx prisma generate --schema prisma/schema.prisma",
+    "db:migrate": "npx prisma migrate dev --schema prisma/schema.prisma",
+    "db:seed": "tsx apps/api/prisma/seed.ts",
+    "db:studio": "npx prisma studio --schema prisma/schema.prisma"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6"
+  }
+}
