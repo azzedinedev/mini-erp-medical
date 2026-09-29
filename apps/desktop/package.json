@@ -1,0 +1,23 @@
+{
+  "name": "@mediflow/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "electron .",
+    "package": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^31.7.5",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.mediflow.clinic",
+    "productName": "MediFlow",
+    "files": ["electron/**/*"],
+    "directories": { "output": "release" },
+    "linux": { "target": ["AppImage", "deb"], "category": "Office" },
+    "mac": { "category": "public.app-category.medical" },
+    "win": { "target": "nsis" }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "appName": "MediFlow",
+  "appTagline": "Le soin, orchestré simplement.",
+  "logoPath": "/icons/mediflow-mark.svg",
+  "defaultLanguage": "fr",
+  "defaultTheme": "light",
+  "availableThemes": ["light", "dark", "clinical"],
+  "captcha": {
+    "enabled": false,
+    "provider": "turnstile",
+    "siteKey": ""
+  },
+  "twoFactor": {
+    "policy": "optional",
+    "issuer": "MediFlow"
+  },
+  "finance": {
+    "enabled": true,
+    "consultations": true,
+    "missionsDeliveries": true,
+    "expenses": true,
+    "defaultCurrency": "EUR",
+    "defaultVatRate": 20
+  },
+  "storage": {
+    "driver": "local",
+    "localPath": "./storage",
+    "s3Bucket": ""
+  },
+  "coding": {
+    "padding": 6,
+    "prefixes": {
+      "patient": "PAT",
+      "prescription": "ORD",
+      "inventory": "INV",
+      "delivery": "LIV",
+      "mission": "MIS",
+      "document": "DOC",
+      "invoice": "FAC"
+    }
+  }
+}
