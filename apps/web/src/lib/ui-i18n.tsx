@@ -262,6 +262,46 @@ const dictionaries: Record<UiLocale, Dictionary> = {
   },
 };
 
+Object.assign(dictionaries.en, {
+  'Nouvelle action': 'New action', 'Retour aux dossiers': 'Back to patient records', 'Dossier synchronisé': 'Record synchronized', 'Synchronisation…': 'Synchronizing…',
+  'Synthèse': 'Summary', 'Actions du patient': 'Patient actions', 'Soins spéciaux': 'Special care', 'Lieux de soins': 'Care locations', 'Fil d’audit': 'Audit trail',
+  'Dossier patient': 'Patient record', 'Dossier patient sécurisé': 'Secure patient record', 'Dossier actif': 'Active record', 'Non renseigné': 'Not provided', 'Non renseignée': 'Not provided',
+  'Prénom': 'First name', 'Nom': 'Last name', 'Téléphone': 'Phone', 'Contact d’urgence': 'Emergency contact', 'Statut': 'Status', 'Allergies et alertes': 'Allergies and alerts',
+  'Notes cliniques': 'Clinical notes', 'Remarques visibles par les professionnels autorisés.': 'Notes visible to authorized professionals.', 'Notes et remarques': 'Notes and remarks',
+  'Enregistrer la remarque': 'Save note', 'Enregistrement…': 'Saving…', 'Le prénom et le nom sont obligatoires.': 'First name and last name are required.',
+  'Prochaine intervention': 'Next intervention', 'Résumé clinique': 'Clinical summary', 'Accès rapides': 'Quick access',
+  'Workflow des analyses': 'Test workflow', 'Workflow des soins spéciaux': 'Special care workflow', 'Étapes persistées dans le dossier patient.': 'Steps persisted in the patient record.',
+  'Aucune nouvelle action': 'No new patient action', 'Ajouter': 'Add', 'Aucun élément': 'No item', 'Élément ajouté': 'Item added',
+  'Patient': 'Patient', 'Dernière activité': 'Latest activity', 'Lieu de soins': 'Care location', 'Dernière mise à jour': 'Last updated', 'Toutes': 'All', 'Tous': 'All',
+  'Tous les dossiers': 'All records', 'À compléter': 'To complete', 'Archivés': 'Archived', 'Toutes les ordonnances': 'All prescriptions', 'Brouillons': 'Drafts',
+  'Stock critique': 'Critical stock', 'Mouvements récents': 'Recent movements', 'À venir': 'Upcoming', 'En cours': 'In progress', 'Terminées': 'Completed',
+  'Toutes les livraisons': 'All deliveries', 'En attente': 'Pending', 'Livrées': 'Delivered', 'Tous les documents': 'All documents', 'Récents': 'Recent', 'À classer': 'To classify', 'Mes imports': 'My imports',
+  'Tous les utilisateurs': 'All users', 'Invitations': 'Invitations', 'Suspendus': 'Suspended', 'Types d’actes': 'Act types', 'Soins infirmiers': 'Nursing care', 'Médicaments': 'Medications',
+  'Toutes les pièces': 'All financial documents', 'Émises': 'Issued', 'Payées': 'Paid', 'Ordonnance': 'Prescription', 'Prescripteur': 'Prescriber', 'Date': 'Date',
+  'Catégorie': 'Category', 'Stock disponible': 'Available stock', 'Emplacement': 'Location', 'Mission': 'Mission', 'Horaire': 'Schedule', 'Bordereau': 'Delivery note',
+  'Destinataire': 'Recipient', 'Date prévue': 'Scheduled date', 'Document': 'Document', 'Entité liée': 'Linked entity', 'Version': 'Version', 'Ajouté le': 'Added on',
+  'Membre': 'Member', 'Fonction': 'Role', 'Spécialité': 'Specialty', 'Disponibilité': 'Availability', 'Organisation': 'Organization', 'Type': 'Type', 'Contact principal': 'Main contact',
+  'Dernière interaction': 'Last interaction', 'Utilisateur': 'User', 'Rôles': 'Roles', 'Dernière connexion': 'Last login', 'Libellé': 'Label', 'Dernière modification': 'Last modified',
+  'Client / partenaire': 'Client / partner', 'Émise le': 'Issued on', 'Montant TTC': 'Total incl. tax', 'Actions': 'Actions', 'Aucune entrée dans la corbeille.': 'No items in the trash.',
+});
+Object.assign(dictionaries.es, {
+  'Nouvelle action': 'Nueva acción', 'Retour aux dossiers': 'Volver a expedientes', 'Dossier synchronisé': 'Expediente sincronizado', 'Synchronisation…': 'Sincronizando…',
+  Synthèse: 'Resumen', 'Actions du patient': 'Acciones del paciente', 'Lieux de soins': 'Lugares de atención', 'Fil d’audit': 'Registro de auditoría', 'Dossier patient': 'Expediente del paciente',
+  'Dossier patient sécurisé': 'Expediente seguro', 'Dossier actif': 'Expediente activo', 'Non renseigné': 'No indicado', 'Non renseignée': 'No indicada', Prénom: 'Nombre', Nom: 'Apellidos', Téléphone: 'Teléfono', Statut: 'Estado',
+  'Allergies et alertes': 'Alergias y alertas', 'Notes cliniques': 'Notas clínicas', 'Prochaine intervention': 'Próxima intervención', 'Résumé clinique': 'Resumen clínico', 'Accès rapides': 'Accesos rápidos',
+  'Workflow des analyses': 'Flujo de análisis', 'Workflow des soins spéciaux': 'Flujo de cuidados especiales', 'Étapes persistées dans le dossier patient.': 'Pasos guardados en el expediente.', 'Aucune nouvelle action': 'No hay acciones nuevas',
+  Ajouter: 'Añadir', 'Aucun élément': 'Ningún elemento', Patient: 'Paciente', 'Dernière activité': 'Última actividad', 'Lieu de soins': 'Lugar de atención', 'Dernière mise à jour': 'Última actualización',
+  'Tous les dossiers': 'Todos los expedientes', Archivés: 'Archivados', 'Stock critique': 'Stock crítico', 'Mouvements récents': 'Movimientos recientes', 'À venir': 'Próximas', Terminées: 'Completadas',
+  'Toutes les livraisons': 'Todas las entregas', 'Tous les documents': 'Todos los documentos', Récents: 'Recientes', 'À classer': 'Por clasificar', 'Mes imports': 'Mis importaciones',
+  'Tous les utilisateurs': 'Todos los usuarios', Invitations: 'Invitaciones', Suspendus: 'Suspendidos', 'Types d’actes': 'Tipos de actos', 'Soins infirmiers': 'Cuidados de enfermería', Médicaments: 'Medicamentos',
+  'Toutes les pièces': 'Todos los documentos financieros', Émises: 'Emitidas', Payées: 'Pagadas', Ordonnance: 'Receta', Prescripteur: 'Prescriptor', Catégorie: 'Categoría', 'Stock disponible': 'Stock disponible', Emplacement: 'Ubicación',
+  Mission: 'Misión', Horaire: 'Horario', Bordereau: 'Albarán', Destinataire: 'Destinatario', 'Date prévue': 'Fecha prevista', Document: 'Documento', 'Entité liée': 'Entidad vinculada', Version: 'Versión', 'Ajouté le': 'Añadido el',
+  Membre: 'Miembro', Fonction: 'Función', Spécialité: 'Especialidad', Disponibilité: 'Disponibilidad', Organisation: 'Organización', Type: 'Tipo', 'Contact principal': 'Contacto principal', 'Dernière interaction': 'Última interacción', Utilisateur: 'Usuario', Rôles: 'Roles', 'Dernière connexion': 'Último acceso', Libellé: 'Etiqueta', 'Dernière modification': 'Última modificación', 'Client / partenaire': 'Cliente / socio', 'Émise le': 'Emitida el', 'Montant TTC': 'Total con impuestos',
+});
+Object.assign(dictionaries.ar, {
+  'Nouvelle action': 'إجراء جديد', 'Retour aux dossiers': 'العودة إلى الملفات', 'Dossier synchronisé': 'تمت مزامنة الملف', 'Synchronisation…': 'جارٍ المزامنة…', Synthèse: 'الملخص', 'Actions du patient': 'إجراءات المريض', 'Lieux de soins': 'أماكن الرعاية', 'Fil d’audit': 'سجل التدقيق', 'Dossier patient': 'ملف المريض', 'Dossier patient sécurisé': 'ملف مريض آمن', 'Dossier actif': 'ملف نشط', 'Non renseigné': 'غير محدد', 'Non renseignée': 'غير محددة', Prénom: 'الاسم الأول', Nom: 'اسم العائلة', Téléphone: 'الهاتف', Statut: 'الحالة', 'Allergies et alertes': 'الحساسيات والتنبيهات', 'Notes cliniques': 'الملاحظات السريرية', 'Prochaine intervention': 'التدخل القادم', 'Résumé clinique': 'الملخص السريري', 'Accès rapides': 'الوصول السريع', 'Workflow des analyses': 'مسار التحاليل', 'Workflow des soins spéciaux': 'مسار الرعاية الخاصة', 'Étapes persistées dans le dossier patient.': 'خطوات محفوظة في ملف المريض', 'Aucune nouvelle action': 'لا توجد إجراءات جديدة', Ajouter: 'إضافة', 'Aucun élément': 'لا توجد عناصر', Patient: 'المريض', 'Dernière activité': 'آخر نشاط', 'Lieu de soins': 'مكان الرعاية', 'Dernière mise à jour': 'آخر تحديث', 'Tous les dossiers': 'كل الملفات', Archivés: 'مؤرشفة', 'Stock critique': 'مخزون حرج', 'Mouvements récents': 'الحركات الأخيرة', 'À venir': 'قادمة', Terminées: 'مكتملة', 'Toutes les livraisons': 'كل التوصيلات', 'Tous les documents': 'كل الوثائق', Récents: 'حديثة', 'À classer': 'بحاجة إلى تصنيف', 'Mes imports': 'استيراداتي', 'Tous les utilisateurs': 'كل المستخدمين', Invitations: 'الدعوات', Suspendus: 'موقوفون', 'Types d’actes': 'أنواع الإجراءات', 'Soins infirmiers': 'الرعاية التمريضية', Médicaments: 'الأدوية', 'Toutes les pièces': 'كل المستندات المالية', Émises: 'صادرة', Payées: 'مدفوعة', Ordonnance: 'وصفة', Prescripteur: 'الطبيب الواصف', Catégorie: 'الفئة', 'Stock disponible': 'المخزون المتاح', Emplacement: 'الموقع', Mission: 'المهمة', Horaire: 'الجدول', Bordereau: 'سند التسليم', Destinataire: 'المستلم', 'Date prévue': 'التاريخ المقرر', Document: 'وثيقة', 'Entité liée': 'الجهة المرتبطة', Version: 'الإصدار', 'Ajouté le': 'تاريخ الإضافة', Membre: 'عضو', Fonction: 'الوظيفة', Spécialité: 'التخصص', Disponibilité: 'التوفر', Organisation: 'المنظمة', Type: 'النوع', 'Contact principal': 'جهة الاتصال الرئيسية', 'Dernière interaction': 'آخر تفاعل', Utilisateur: 'المستخدم', Rôles: 'الأدوار', 'Dernière connexion': 'آخر تسجيل دخول', Libellé: 'التسمية', 'Dernière modification': 'آخر تعديل', 'Client / partenaire': 'العميل / الشريك', 'Émise le': 'تاريخ الإصدار', 'Montant TTC': 'الإجمالي شامل الضريبة',
+});
+
 const LocaleContext = createContext<{
   locale: UiLocale;
   setLocale: (locale: UiLocale) => void;

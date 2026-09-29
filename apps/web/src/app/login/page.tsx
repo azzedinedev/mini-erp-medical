@@ -5,12 +5,13 @@ import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, Eye, EyeOff, Fingerprint, Languages, LockKeyhole, ShieldCheck } from 'lucide-react';
 import { ApiClientError, apiClient } from '@/lib/api-client';
+import { storeSession } from '@/lib/auth-store';
 
 type LoginResponse = {
   requiresTwoFactor?: boolean;
   accessToken?: string;
   refreshToken?: string;
-  user?: { sub: string; email: string };
+  user?: { sub: string; email: string; firstName?: string; lastName?: string; roles?: Array<{ id: string; name: string; permissions: string[] }>; };
 };
 
 export default function LoginPage() {
@@ -42,8 +43,7 @@ export default function LoginPage() {
         return;
       }
       if (!result.accessToken || !result.refreshToken) throw new Error('Réponse de connexion incomplète');
-      window.localStorage.setItem('mediflow.accessToken', result.accessToken);
-      window.localStorage.setItem('mediflow.refreshToken', result.refreshToken);
+      storeSession({ accessToken: result.accessToken, refreshToken: result.refreshToken, user: result.user });
       router.push('/');
     } catch (error) {
       setMessage(error instanceof ApiClientError ? error.message : 'Impossible de joindre le serveur de connexion.');

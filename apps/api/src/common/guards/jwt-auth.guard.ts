@@ -10,6 +10,8 @@ import { JwtService } from '@nestjs/jwt';
 export interface AuthPrincipal {
   sub: string;
   email: string;
+  firstName?: string;
+  lastName?: string;
   roles: Array<{ id: string; name: string; permissions: string[] }>;
 }
 

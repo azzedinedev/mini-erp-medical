@@ -1,7 +1,8 @@
-import { Controller, Delete, Get, Param, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { AuthPrincipal, JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { RequirePermission } from '../../common/decorators/permissions.decorator';
 
@@ -15,6 +16,9 @@ export class UsersController {
   @Get()
   @RequirePermission('users', 'view')
   list() { return this.users.list(); }
+
+  @Patch('me')
+  updateProfile(@Body() dto: UpdateProfileDto, @Req() request: { user: AuthPrincipal }) { return this.users.updateProfile(request.user.sub, dto); }
 
   @Delete(':id')
   @RequirePermission('users', 'delete')

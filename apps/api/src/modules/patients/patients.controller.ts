@@ -36,7 +36,15 @@ export class PatientsController {
   @RequirePermission('patients', 'archive')
   archive(@Param('id') id: string) { return this.patients.archive(id); }
 
+  @Post(':id/restore')
+  @RequirePermission('patients', 'update')
+  restore(@Param('id') id: string) { return this.patients.restore(id); }
+
   @Delete(':id')
   @RequirePermission('patients', 'delete')
   remove(@Param('id') id: string) { return this.patients.remove(id); }
+
+  @Delete(':id/permanent')
+  @RequirePermission('patients', 'delete')
+  removePermanently(@Param('id') id: string) { return this.patients.removePermanently(id); }
 }

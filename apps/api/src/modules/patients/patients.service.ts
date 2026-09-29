@@ -68,6 +68,18 @@ export class PatientsService {
     return this.prisma.patient.update({ where: { id }, data: { status: 'ARCHIVED', archivedAt: new Date() } });
   }
 
+  async restore(id: string) {
+    const patient = await this.prisma.patient.findFirst({ where: { id }, select: { id: true } });
+    if (!patient) throw new NotFoundException('Dossier patient introuvable');
+    return this.prisma.patient.update({ where: { id }, data: { deletedAt: null, archivedAt: null, status: 'ACTIVE' } });
+  }
+
+  async removePermanently(id: string) {
+    const patient = await this.prisma.patient.findFirst({ where: { id }, select: { id: true } });
+    if (!patient) throw new NotFoundException('Dossier patient introuvable');
+    return this.prisma.patient.delete({ where: { id } });
+  }
+
   async remove(id: string) {
     await this.ensure(id);
     return this.prisma.patient.update({ where: { id }, data: { deletedAt: new Date() } });

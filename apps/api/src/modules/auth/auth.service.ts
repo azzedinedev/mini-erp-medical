@@ -34,6 +34,8 @@ export class AuthService {
     const principal: AuthPrincipal = {
       sub: user.id,
       email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
       roles: user.roles.map(({ role }) => ({
         id: role.id,
         name: role.name,
@@ -82,6 +84,8 @@ export class AuthService {
     const principal: AuthPrincipal = {
       sub: user.id,
       email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
       roles: user.roles.map(({ role }) => ({ id: role.id, name: role.name, permissions: role.permissions.map((p) => `${p.module}:${p.action}`) })),
     };
     return {
