@@ -117,7 +117,7 @@ function ActionSheet({ row, t, onClose, onView, onEdit, onArchive, onDelete }: {
 function CrudDialog({ module, config, mode, initialRow, t, onClose, onSave }: { module: keyof typeof moduleConfigs; config: (typeof moduleConfigs)[keyof typeof moduleConfigs]; mode: 'create' | 'edit'; initialRow?: string[]; t: (value: string) => string; onClose: () => void; onSave: (row: string[], mode: 'create' | 'edit') => void }) {
   const parts = initialRow?.[0]?.split('|') ?? [];
   const [label, setLabel] = useState(parts[0] ?? '');
-  const [code, setCode] = useState(parts[1] ?? (module === 'patients' ? 'PAT-000000' : '')); 
+  const [code, setCode] = useState(parts[1] ?? (module === 'patients' ? 'PAT-000000' : ''));
   const [phone, setPhone] = useState('');
   const [notes, setNotes] = useState('');
   const [tab, setTab] = useState<'identity' | 'analysis' | 'care' | 'notes'>('identity');

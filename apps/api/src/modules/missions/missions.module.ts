@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
+import { AuthModule } from '../auth/auth.module';
 import { MissionsController } from './missions.controller';
 import { MissionsService } from './missions.service';
 
-@Module({ controllers: [MissionsController], providers: [MissionsService], exports: [MissionsService] })
+@Module({ imports: [AuthModule], controllers: [MissionsController], providers: [MissionsService], exports: [MissionsService] })
 export class MissionsModule {}

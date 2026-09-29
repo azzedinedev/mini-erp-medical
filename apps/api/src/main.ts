@@ -6,7 +6,6 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
-import { PrismaService } from './prisma/prisma.service';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
@@ -19,8 +18,7 @@ async function bootstrap(): Promise<void> {
 
   const swaggerConfig = new DocumentBuilder().setTitle('MediFlow API').setDescription('API modulaire de gestion clinique').setVersion('0.1').addBearerAuth().build();
   SwaggerModule.setup('api/docs', app, SwaggerModule.createDocument(app, swaggerConfig));
-  const prisma = app.get(PrismaService);
-  await prisma.enableShutdownHooks(app);
+  app.enableShutdownHooks();
   await app.listen(config.get<number>('app.port') ?? 4000, '0.0.0.0');
 }
 
