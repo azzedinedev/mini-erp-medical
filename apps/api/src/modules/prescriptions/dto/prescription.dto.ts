@@ -1,5 +1,6 @@
 import { IsArray, IsBase64, IsDateString, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
+import { PartialType } from '@nestjs/swagger';
 
 export class PrescriptionItemDto {
   @IsOptional() @IsString() medicationId?: string;
@@ -18,6 +19,8 @@ export class CreatePrescriptionDto {
   @IsOptional() @IsString() instructions?: string;
   @IsOptional() @IsDateString() validUntil?: string;
 }
+
+export class UpdatePrescriptionDto extends PartialType(CreatePrescriptionDto) {}
 
 export class SignPrescriptionDto {
   @IsString() @IsBase64() signatureData!: string;

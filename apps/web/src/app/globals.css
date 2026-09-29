@@ -555,7 +555,15 @@ html[dir='rtl'] .data-table, html[dir='rtl'] .dialog, html[dir='rtl'] .sidebar {
 .dialog-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 24px; background: rgba(8, 28, 45, .46); animation: drawer-fade .18s ease both; }
 .dialog { width: min(720px, 100%); max-height: min(820px, calc(100vh - 40px)); overflow: auto; border: 1px solid rgba(255,255,255,.35); border-radius: 20px; color: var(--ink); background: color-mix(in srgb, var(--surface) 86%, transparent); box-shadow: 0 24px 70px rgba(8, 32, 55, .28); animation: dialog-in .22s ease both; }
 .dialog__header { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; padding: 25px 28px 20px; border-bottom: 1px solid var(--line); }
-.dialog__header h2 { margin: 0; font-size: 23px; letter-spacing: -.04em; }
+  .dialog__header h2 { margin: 0; font-size: 23px; letter-spacing: -.04em; }
+  .delete-dialog { width: min(560px, 100%); }
+  .delete-dialog__body { display: grid; gap: 18px; }
+  .delete-summary { display: flex; align-items: center; gap: 12px; padding: 14px; border: 1px solid #f0c4bf; border-radius: 12px; color: var(--coral); background: var(--coral-soft); }
+  .delete-summary svg { width: 21px; height: 21px; }
+  .delete-summary strong, .delete-summary span { display: block; }
+  .delete-summary strong { color: var(--ink); font-size: 13px; }
+  .delete-summary span { margin-top: 4px; color: var(--muted); font-size: 11px; }
+  .form-error--warning { color: #996421; border-color: #ecd6a6; background: var(--gold-soft); }
 .dialog__header p { margin: 7px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .dialog__body { padding: 24px 28px; }
 .dialog__footer { display: flex; justify-content: flex-end; gap: 9px; margin-top: 23px; padding-top: 17px; border-top: 1px solid var(--line); }

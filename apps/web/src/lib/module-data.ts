@@ -8,12 +8,22 @@ export type ModuleRecord = {
   id?: string;
   row: string[];
   remote?: boolean;
+  data?: Record<string, unknown>;
+  deletedAt?: string;
+  deletionReason?: string;
 };
 
 export type CrudDraft = {
   label: string;
   code: string;
   phone: string;
+  email: string;
+  category: string;
+  unit: string;
+  status: string;
+  scheduledAt: string;
+  patientId: string;
+  prescriberId: string;
   notes: string;
 };
 
@@ -114,56 +124,121 @@ export async function loadModuleRecords(module: ModuleKey): Promise<ModuleRecord
     switch (module) {
       case 'patients': {
         const result = await apiClient.get<Paginated<Record<string, unknown>>>('/patients?page=1&pageSize=100');
-        return result.data.map((item) => ({ id: String(item.id), remote: true, row: [`${item.firstName} ${item.lastName}|${item.code}|${age(String(item.birthDate ?? ''))}|${initials(String(item.firstName), String(item.lastName))}`, 'Dossier patient', '—', status(item.status), date(item.updatedAt)] }));
+        return result.data.map((item) => ({ id: String(item.id), remote: true, data: item, row: [`${item.firstName} ${item.lastName}|${item.code}|${age(String(item.birthDate ?? ''))}|${initials(String(item.firstName), String(item.lastName))}`, 'Dossier patient', '—', status(item.status), date(item.updatedAt)] }));
       }
       case 'prescriptions': {
         const result = await apiClient.get<Paginated<Record<string, unknown>>>('/prescriptions?page=1&pageSize=100');
-        return result.data.map((item) => { const patient = item.patient as Record<string, unknown> | undefined; const prescriber = item.prescriber as Record<string, unknown> | undefined; const patientName = `${patient?.firstName ?? ''} ${patient?.lastName ?? ''}`.trim(); return { id: String(item.id), remote: true, row: [`${item.code}|${patientName}|${patient?.code ?? ''}`, `${patientName}|${patient?.code ?? ''}`, `Dr. ${prescriber?.firstName ?? ''} ${prescriber?.lastName ?? ''}`.trim(), date(item.createdAt), status(item.status)] }; });
+        return result.data.map((item) => { const patient = item.patient as Record<string, unknown> | undefined; const prescriber = item.prescriber as Record<string, unknown> | undefined; const patientName = `${patient?.firstName ?? ''} ${patient?.lastName ?? ''}`.trim(); return { id: String(item.id), remote: true, data: item, row: [`${item.code}|${patientName}|${patient?.code ?? ''}`, `${patientName}|${patient?.code ?? ''}`, `Dr. ${prescriber?.firstName ?? ''} ${prescriber?.lastName ?? ''}`.trim(), date(item.createdAt), status(item.status)] }; });
       }
       case 'inventory': {
         const result = await apiClient.get<Record<string, unknown>[]>('/inventory');
-        return result.map((item) => ({ id: String(item.id), remote: true, row: [`${item.code}|${item.name}|${item.category ?? 'Stock'}`, String(item.category ?? 'Stock'), `${item.quantity ?? 0} ${item.unit ?? ''} / min. ${item.minQuantity ?? 0}`, String(item.location ?? '—'), Number(item.quantity ?? 0) <= Number(item.minQuantity ?? 0) ? 'Stock critique' : 'Disponible'] }));
+        return result.map((item) => ({ id: String(item.id), remote: true, data: item, row: [`${item.code}|${item.name}|${item.category ?? 'Stock'}`, String(item.category ?? 'Stock'), `${item.quantity ?? 0} ${item.unit ?? ''} / min. ${item.minQuantity ?? 0}`, String(item.location ?? '—'), Number(item.quantity ?? 0) <= Number(item.minQuantity ?? 0) ? 'Stock critique' : 'Disponible'] }));
       }
       case 'missions': {
         const result = await apiClient.get<Record<string, unknown>[]>('/missions');
-        return result.map((item) => { const patient = item.patient as Record<string, unknown> | undefined; return { id: String(item.id), remote: true, row: [`${item.code}|${item.title}`, patient ? `${patient.firstName} ${patient.lastName}|${patient.code}` : 'Partenaire', String(item.assignedToId ?? 'Équipe à affecter'), date(item.scheduledAt), status(item.status)] }; });
+        return result.map((item) => { const patient = item.patient as Record<string, unknown> | undefined; return { id: String(item.id), remote: true, data: item, row: [`${item.code}|${item.title}`, patient ? `${patient.firstName} ${patient.lastName}|${patient.code}` : 'Partenaire', String(item.assignedToId ?? 'Équipe à affecter'), date(item.scheduledAt), status(item.status)] }; });
       }
       case 'deliveries': {
         const result = await apiClient.get<Record<string, unknown>[]>('/deliveries');
-        return result.map((item) => ({ id: String(item.id), remote: true, row: [`${item.code}|Bordereau`, String((item.partner as Record<string, unknown> | undefined)?.name ?? 'Destinataire'), '—', date(item.scheduledAt), status(item.status)] }));
+        return result.map((item) => ({ id: String(item.id), remote: true, data: item, row: [`${item.code}|Bordereau`, String((item.partner as Record<string, unknown> | undefined)?.name ?? 'Destinataire'), '—', date(item.scheduledAt), status(item.status)] }));
       }
       case 'documents': {
         const result = await apiClient.get<Record<string, unknown>[]>('/documents');
-        return result.map((item) => ({ id: String(item.id), remote: true, row: [`${item.fileName}|${item.title}`, String(item.category ?? 'Document'), String(item.entityType ?? '—'), 'v1', date(item.createdAt)] }));
+        return result.map((item) => ({ id: String(item.id), remote: true, data: item, row: [`${item.fileName}|${item.title}`, String(item.category ?? 'Document'), String(item.entityType ?? '—'), 'v1', date(item.createdAt)] }));
       }
       case 'team': {
         const result = await apiClient.get<Record<string, unknown>[]>('/medical-staff');
-        return result.map((item) => ({ id: String(item.id), remote: true, row: [`${item.firstName} ${item.lastName}|${item.specialty ?? '—'}|${initials(String(item.firstName), String(item.lastName))}`, String(item.staffType ?? 'Équipe'), String(item.specialty ?? '—'), 'Disponibilité à définir', item.isActive === false ? 'Absent' : 'Actif'] }));
+        return result.map((item) => ({ id: String(item.id), remote: true, data: item, row: [`${item.firstName} ${item.lastName}|${item.specialty ?? '—'}|${initials(String(item.firstName), String(item.lastName))}`, String(item.staffType ?? 'Équipe'), String(item.specialty ?? '—'), 'Disponibilité à définir', item.isActive === false ? 'Absent' : 'Actif'] }));
       }
       case 'partners': {
         const result = await apiClient.get<Record<string, unknown>[]>('/partners');
-        return result.map((item) => ({ id: String(item.id), remote: true, row: [`${item.name}|${item.kind ?? 'Partenaire'}|${initials(String(item.name).split(' ')[0], String(item.name).split(' ').slice(1).join(' '))}`, String(item.kind ?? 'Partenaire'), String(item.contactEmail ?? 'Contact à renseigner'), date(item.updatedAt), item.isActive === false ? 'Archivé' : 'Actif'] }));
+        return result.map((item) => ({ id: String(item.id), remote: true, data: item, row: [`${item.name}|${item.kind ?? 'Partenaire'}|${initials(String(item.name).split(' ')[0], String(item.name).split(' ').slice(1).join(' '))}`, String(item.kind ?? 'Partenaire'), String(item.email ?? item.contactName ?? 'Contact à renseigner'), date(item.updatedAt), item.isActive === false ? 'Archivé' : 'Actif'] }));
       }
       case 'users': {
         const result = await apiClient.get<Record<string, unknown>[]>('/users');
-        return result.map((item) => ({ id: String(item.id), remote: true, row: [`${item.firstName} ${item.lastName}|${item.email}|${initials(String(item.firstName), String(item.lastName))}`, 'Rôles à consulter', date(item.lastLoginAt), item.totpEnabled ? 'Activée' : 'Non activée', status(item.status)] }));
+        return result.map((item) => ({ id: String(item.id), remote: true, data: item, row: [`${item.firstName} ${item.lastName}|${item.email}|${initials(String(item.firstName), String(item.lastName))}`, 'Rôles à consulter', date(item.lastLoginAt), item.totpEnabled ? 'Activée' : 'Non activée', status(item.status)] }));
       }
       case 'references': {
         const [types, medications] = await Promise.all([
           apiClient.get<Record<string, unknown>[]>('/reference-data/types'),
           apiClient.get<Record<string, unknown>[]>('/reference-data/medications'),
         ]);
-        return [...types.map((item) => ({ id: String(item.id), remote: true, row: [`${String((item.labels as Record<string, string> | undefined)?.fr ?? item.code)}|${item.code}|${item.icon ?? 'ListChecks'}`, 'Type d’acte', String(item.code), date(item.updatedAt), 'Actif'] })), ...medications.map((item) => ({ id: String(item.id), remote: true, row: [`${item.name}|${item.code}|${item.form ?? 'Médicament'}`, 'Médicament', String(item.code), date(item.updatedAt), 'Actif'] }))];
+        return [...types.map((item) => ({ id: String(item.id), remote: true, data: item, row: [`${String((item.labels as Record<string, string> | undefined)?.fr ?? item.code)}|${item.code}|${item.icon ?? 'ListChecks'}`, 'Type d’acte', String(item.code), date(item.updatedAt), 'Actif'] })), ...medications.map((item) => ({ id: String(item.id), remote: true, data: item, row: [`${item.name}|${item.code}|${item.form ?? 'Médicament'}`, 'Médicament', String(item.code), date(item.updatedAt), 'Actif'] }))];
       }
       case 'finance': {
         const result = await apiClient.get<Record<string, unknown>[]>('/finance');
-        return result.map((item) => ({ id: String(item.id), remote: true, row: [`${item.code}|${item.kind}`, String((item.partner as Record<string, unknown> | undefined)?.name ?? 'Partenaire'), date(item.createdAt), `${item.totalTtc ?? 0} ${item.currency ?? 'EUR'}`, status(item.status)] }));
+        return result.map((item) => ({ id: String(item.id), remote: true, data: item, row: [`${item.code}|${item.kind}`, String((item.partner as Record<string, unknown> | undefined)?.name ?? 'Partenaire'), date(item.createdAt), `${item.totalTtc ?? 0} ${item.currency ?? 'EUR'}`, status(item.status)] }));
       }
       case 'settings': return null;
     }
   } catch {
     // The UI remains usable in local demonstration mode when the API or the
     // database is not running. Mutations are still persisted in the browser.
+    return null;
+  }
+}
+
+function remoteTrashRecord(module: ModuleKey, item: Record<string, unknown>, referenceKind?: 'type' | 'medication'): ModuleRecord {
+  const patient = item.patient as Record<string, unknown> | undefined;
+  const prescriber = item.prescriber as Record<string, unknown> | undefined;
+  const partner = item.partner as Record<string, unknown> | undefined;
+  const firstName = String(item.firstName ?? '');
+  const lastName = String(item.lastName ?? '');
+  const fullName = `${firstName} ${lastName}`.trim() || String(item.name ?? item.title ?? item.code ?? 'Élément');
+  switch (module) {
+    case 'patients':
+      return { id: String(item.id), remote: true, data: item, deletedAt: String(item.deletedAt ?? ''), row: [`${fullName}|${item.code ?? '—'}|${age(String(item.birthDate ?? ''))}|${initials(firstName, lastName)}`, 'Dossier patient', '—', 'Archivé', date(item.deletedAt ?? item.updatedAt)] };
+    case 'prescriptions':
+      return { id: String(item.id), remote: true, data: item, deletedAt: String(item.deletedAt ?? ''), row: [`${item.code ?? '—'}|${patient ? `${patient.firstName ?? ''} ${patient.lastName ?? ''}`.trim() : 'Patient'}|${patient?.code ?? ''}`, `${patient ? `${patient.firstName ?? ''} ${patient.lastName ?? ''}`.trim() : 'Patient'}|${patient?.code ?? ''}`, `Dr. ${prescriber?.firstName ?? ''} ${prescriber?.lastName ?? ''}`.trim(), date(item.createdAt), 'Archivé'] };
+    case 'inventory':
+      return { id: String(item.id), remote: true, data: item, deletedAt: String(item.deletedAt ?? ''), row: [`${item.code ?? '—'}|${item.name ?? 'Article'}|${item.category ?? 'Stock'}`, String(item.category ?? 'Stock'), `${item.quantity ?? 0} ${item.unit ?? ''} / min. ${item.minQuantity ?? 0}`, String(item.location ?? '—'), 'Archivé'] };
+    case 'missions':
+      return { id: String(item.id), remote: true, data: item, deletedAt: String(item.deletedAt ?? ''), row: [`${item.code ?? '—'}|${item.title ?? 'Mission'}`, patient ? `${patient.firstName ?? ''} ${patient.lastName ?? ''}|${patient.code ?? ''}` : String(partner?.name ?? 'Partenaire'), String(item.assignedToId ?? 'Équipe'), date(item.scheduledAt), 'Archivé'] };
+    case 'deliveries':
+      return { id: String(item.id), remote: true, data: item, deletedAt: String(item.deletedAt ?? ''), row: [`${item.code ?? '—'}|Bordereau`, String(partner?.name ?? 'Destinataire'), '—', date(item.scheduledAt), 'Archivé'] };
+    case 'documents':
+      return { id: String(item.id), remote: true, data: item, deletedAt: String(item.deletedAt ?? ''), row: [`${item.fileName ?? 'document'}|${item.title ?? 'Document'}`, String(item.category ?? 'Document'), String(item.entityType ?? '—'), 'v1', date(item.deletedAt ?? item.updatedAt)] };
+    case 'team':
+      return { id: String(item.id), remote: true, data: item, deletedAt: String(item.deletedAt ?? ''), row: [`${fullName}|${item.specialty ?? '—'}|${initials(firstName, lastName)}`, String(item.staffType ?? 'Équipe'), String(item.specialty ?? '—'), '—', 'Archivé'] };
+    case 'partners':
+      return { id: String(item.id), remote: true, data: item, deletedAt: String(item.deletedAt ?? ''), row: [`${item.name ?? 'Partenaire'}|${item.kind ?? 'Partenaire'}|${initials(String(item.name ?? '').split(' ')[0], String(item.name ?? '').split(' ').slice(1).join(' '))}`, String(item.kind ?? 'Partenaire'), String(item.email ?? item.contactName ?? 'Contact à renseigner'), date(item.deletedAt ?? item.updatedAt), 'Archivé'] };
+    case 'users':
+      return { id: String(item.id), remote: true, data: item, deletedAt: String(item.deletedAt ?? ''), row: [`${fullName}|${item.email ?? '—'}|${initials(firstName, lastName)}`, 'Rôles à consulter', date(item.lastLoginAt), item.totpEnabled ? 'Activée' : 'Non activée', 'Archivé'] };
+    case 'references': {
+      if (referenceKind === 'medication') return { id: String(item.id), remote: true, data: item, deletedAt: String(item.archivedAt ?? ''), row: [`${item.name ?? 'Médicament'}|${item.code ?? '—'}|${item.form ?? 'Médicament'}`, 'Médicament', String(item.code ?? '—'), date(item.archivedAt ?? item.updatedAt), 'Archivé'] };
+      const labels = item.labels as Record<string, string> | undefined;
+      return { id: String(item.id), remote: true, data: item, deletedAt: String(item.archivedAt ?? ''), row: [`${labels?.fr ?? item.code ?? 'Référence'}|${item.code ?? '—'}|${item.icon ?? 'ListChecks'}`, 'Type d’acte', String(item.code ?? '—'), date(item.archivedAt ?? item.updatedAt), 'Archivé'] };
+    }
+    case 'finance':
+      return { id: String(item.id), remote: true, data: item, deletedAt: String(item.deletedAt ?? ''), row: [`${item.code ?? '—'}|${item.kind ?? 'Document financier'}`, String(partner?.name ?? 'Partenaire'), date(item.createdAt), `${item.totalTtc ?? 0} ${item.currency ?? 'EUR'}`, 'Archivé'] };
+    case 'settings':
+      return { id: String(item.id), remote: true, data: item, row: [fullName, '—', '—', 'Archivé'] };
+  }
+}
+
+export async function loadModuleTrash(module: ModuleKey): Promise<ModuleRecord[] | null> {
+  try {
+    switch (module) {
+      case 'patients': return (await apiClient.get<Record<string, unknown>[]>('/patients/trash')).map((item) => remoteTrashRecord(module, item));
+      case 'prescriptions': return (await apiClient.get<Record<string, unknown>[]>('/prescriptions/trash')).map((item) => remoteTrashRecord(module, item));
+      case 'inventory': return (await apiClient.get<Record<string, unknown>[]>('/inventory/trash')).map((item) => remoteTrashRecord(module, item));
+      case 'missions': return (await apiClient.get<Record<string, unknown>[]>('/missions/trash')).map((item) => remoteTrashRecord(module, item));
+      case 'deliveries': return (await apiClient.get<Record<string, unknown>[]>('/deliveries/trash')).map((item) => remoteTrashRecord(module, item));
+      case 'documents': return (await apiClient.get<Record<string, unknown>[]>('/documents/trash')).map((item) => remoteTrashRecord(module, item));
+      case 'team': return (await apiClient.get<Record<string, unknown>[]>('/medical-staff/trash')).map((item) => remoteTrashRecord(module, item));
+      case 'partners': return (await apiClient.get<Record<string, unknown>[]>('/partners/trash')).map((item) => remoteTrashRecord(module, item));
+      case 'users': return (await apiClient.get<Record<string, unknown>[]>('/users/trash')).map((item) => remoteTrashRecord(module, item));
+      case 'finance': return (await apiClient.get<Record<string, unknown>[]>('/finance/trash')).map((item) => remoteTrashRecord(module, item));
+      case 'references': {
+        const [types, medications] = await Promise.all([
+          apiClient.get<Record<string, unknown>[]>('/reference-data/types/trash'),
+          apiClient.get<Record<string, unknown>[]>('/reference-data/medications/trash'),
+        ]);
+        return [...types.map((item) => remoteTrashRecord(module, item, 'type')), ...medications.map((item) => remoteTrashRecord(module, item, 'medication'))];
+      }
+      case 'settings': return null;
+    }
+  } catch {
     return null;
   }
 }

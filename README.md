@@ -33,6 +33,18 @@ Chaque domaine suit `Controller → Service → PrismaRepository` (Prisma est en
 - PostgreSQL 14+ (ou Docker)
 - npm 10+
 
+Le chemin Docker recommandé est le plus court :
+
+```bash
+cp .env.example .env
+# DATABASE_URL de .env doit rester sur le port 5432 exposé par Compose.
+docker compose up -d postgres minio
+npm install
+npm run db:generate
+npm run db:migrate
+npm run db:seed
+```
+
 Sur Windows avec PostgreSQL installé via l'installeur et pgAdmin, créez d'abord une base vide `mediflow` et un rôle `mediflow`, puis configurez le fichier `.env` à la racine. Le port doit correspondre au serveur PostgreSQL choisi : par exemple `5433` pour PostgreSQL 14 ou `5432` pour PostgreSQL 18.
 
 ```powershell
@@ -79,6 +91,21 @@ npm run db:migrate    # migration Prisma
 npm run db:seed       # rôles, permissions et jeu de démo
 npm run dev:desktop   # Electron après un build web
 ```
+
+## Utilisation CRUD, permissions et corbeille
+
+Une fois l’API et PostgreSQL démarrés, les écrans de modules chargent les données depuis l’API et les mutations restent visibles après rechargement :
+
+- création : bouton principal, validation du formulaire puis `POST` vers le module concerné ;
+- consultation : clic sur une ligne ou sur **Consulter** ouvre une fiche détaillée ;
+- édition : **Modifier** envoie un `PATCH` validé et conserve les données métier ;
+- suppression : **Supprimer** effectue une suppression logique (`deletedAt` ou `archivedAt`) et place l’enregistrement dans la corbeille ;
+- restauration : **Restaurer** appelle la route `POST /:id/restore` ;
+- suppression définitive : **Vider la corbeille** demande une confirmation et la permission `module:delete_permanent`, puis appelle `DELETE /:id/permanent`.
+
+Les routes de corbeille sont disponibles par exemple sur `GET /api/patients/trash`, `GET /api/prescriptions/trash`, `GET /api/inventory/trash`, `GET /api/documents/trash` et leurs équivalents métier. Les référentiels utilisent `GET /api/reference-data/types/trash` et `GET /api/reference-data/medications/trash`. Le seed crée la permission `delete_permanent` pour le rôle administrateur ; relancez `npm run db:seed` après une évolution des permissions.
+
+Le frontend conserve temporairement les mutations locales lorsqu’une API ou une base n’est pas disponible afin de ne pas perdre la saisie, mais une synchronisation API réussie est nécessaire pour une persistance partagée entre navigateurs. En production, ne désactivez pas les permissions RBAC et ne donnez `delete_permanent` qu’aux rôles de supervision.
 
 ## Variables et sécurité
 

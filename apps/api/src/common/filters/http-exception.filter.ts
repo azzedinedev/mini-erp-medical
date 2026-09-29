@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 
 @Catch()
@@ -18,8 +19,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const response = context.getResponse<Response>();
     const request = context.getRequest<Request>();
     const requestId = request.header('x-request-id') ?? randomUUID();
-    const status = exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
-    const raw = exception instanceof HttpException ? exception.getResponse() : 'Erreur interne du serveur';
+    const prismaCode = exception instanceof Prisma.PrismaClientKnownRequestError ? exception.code : undefined;
+    const status = exception instanceof HttpException ? exception.getStatus() : prismaCode === 'P2025' ? HttpStatus.NOT_FOUND : prismaCode === 'P2003' ? HttpStatus.CONFLICT : HttpStatus.INTERNAL_SERVER_ERROR;
+    const raw = exception instanceof HttpException ? exception.getResponse() : prismaCode === 'P2003' ? 'Suppression impossible : des données liées existent encore.' : prismaCode === 'P2025' ? 'Enregistrement introuvable.' : 'Erreur interne du serveur';
     const message = typeof raw === 'object' && raw !== null && 'message' in raw ? raw.message : raw;
 
     if (status >= 500) this.logger.error({ requestId, path: request.url, exception });

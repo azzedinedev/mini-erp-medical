@@ -5,10 +5,18 @@ import { PrismaService } from '../../prisma/prisma.service';
 @Injectable()
 export class DocumentsService {
   constructor(private readonly prisma: PrismaService) {}
+  trash() { return this.prisma.document.findMany({ where: { deletedAt: { not: null } }, include: { versions: { orderBy: { version: 'desc' }, take: 1 } }, orderBy: { updatedAt: 'desc' } }); }
   list(search?: string) { return this.prisma.document.findMany({ where: { deletedAt: null, ...(search ? { OR: [{ title: { contains: search, mode: 'insensitive' } }, { fileName: { contains: search, mode: 'insensitive' } }, { category: { contains: search, mode: 'insensitive' } }] } : {}) }, include: { versions: { orderBy: { version: 'desc' }, take: 1 } }, orderBy: { createdAt: 'desc' } }); }
   createMetadata(data: { title: string; category: string; entityType: DocumentEntityType; fileName: string; mimeType: string; storageKey: string; sizeBytes: number; metadata?: Record<string, unknown>; createdById: string }) {
     return this.prisma.document.create({ data: { ...data, code: `DOC-${Date.now()}`, sizeBytes: BigInt(data.sizeBytes), metadata: data.metadata as Prisma.InputJsonValue } });
   }
+  update(id: string, data: { title?: string; category?: string; entityType?: DocumentEntityType; metadata?: Record<string, unknown> }) {
+    const { title, category, entityType, metadata } = data;
+    return this.prisma.document.update({ where: { id }, data: { title, category, entityType, metadata: metadata as Prisma.InputJsonValue } });
+  }
+  remove(id: string) { return this.prisma.document.update({ where: { id }, data: { deletedAt: new Date() } }); }
+  removePermanently(id: string) { return this.prisma.document.delete({ where: { id } }); }
+  restore(id: string) { return this.prisma.document.update({ where: { id }, data: { deletedAt: null } }); }
   addVersion(documentId: string, data: { storageKey: string; sizeBytes: number; checksum?: string; changeNote?: string; createdById: string }) { return this.prisma.documentVersion.create({ data: { documentId, version: 1, ...data, sizeBytes: BigInt(data.sizeBytes) } }); }
 
   async archiveGeneratedPdf(input: { title: string; prescriptionId: string; storageKey: string; sizeBytes: number; checksum: string; createdById: string }) {

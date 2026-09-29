@@ -2,7 +2,7 @@ import { SetMetadata } from '@nestjs/common';
 
 export interface PermissionRequirement {
   module: string;
-  action: 'view' | 'create' | 'update' | 'delete' | 'archive' | 'export';
+  action: 'view' | 'create' | 'update' | 'delete' | 'delete_permanent' | 'archive' | 'export';
 }
 
 export const PERMISSIONS_KEY = 'mediflow:permissions';

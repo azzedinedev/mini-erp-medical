@@ -1,8 +1,8 @@
-import { Body, Controller, Get, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { PrescriptionsService } from './prescriptions.service';
-import { CreatePrescriptionDto, SignPrescriptionDto } from './dto/prescription.dto';
+import { CreatePrescriptionDto, SignPrescriptionDto, UpdatePrescriptionDto } from './dto/prescription.dto';
 import { JwtAuthGuard, AuthPrincipal } from '../../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { RequirePermission } from '../../common/decorators/permissions.decorator';
@@ -17,6 +17,10 @@ type RequestWithUser = { user: AuthPrincipal };
 @Controller('prescriptions')
 export class PrescriptionsController {
   constructor(private readonly prescriptions: PrescriptionsService, private readonly pdf: PdfService, private readonly storage: StorageService, private readonly documents: DocumentsService) {}
+
+  @Get('trash')
+  @RequirePermission('prescriptions', 'view')
+  trash() { return this.prescriptions.trash(); }
 
   @Get()
   @RequirePermission('prescriptions', 'view')
@@ -42,6 +46,22 @@ export class PrescriptionsController {
   @Post()
   @RequirePermission('prescriptions', 'create')
   create(@Body() dto: CreatePrescriptionDto) { return this.prescriptions.create(dto); }
+
+  @Patch(':id')
+  @RequirePermission('prescriptions', 'update')
+  update(@Param('id') id: string, @Body() dto: UpdatePrescriptionDto) { return this.prescriptions.update(id, dto); }
+
+  @Delete(':id/permanent')
+  @RequirePermission('prescriptions', 'delete_permanent')
+  permanentlyRemove(@Param('id') id: string) { return this.prescriptions.removePermanently(id); }
+
+  @Delete(':id')
+  @RequirePermission('prescriptions', 'delete')
+  remove(@Param('id') id: string) { return this.prescriptions.remove(id); }
+
+  @Post(':id/restore')
+  @RequirePermission('prescriptions', 'update')
+  restore(@Param('id') id: string) { return this.prescriptions.restore(id); }
 
   @Post(':id/sign')
   @RequirePermission('prescriptions', 'update')

@@ -1,4 +1,5 @@
 import { IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { PartialType } from '@nestjs/swagger';
 
 export class CreateInventoryItemDto {
   @IsString() name!: string;
@@ -16,3 +17,5 @@ export class StockMovementDto {
   @IsOptional() @IsString() reason?: string;
   @IsOptional() @IsString() reference?: string;
 }
+
+export class UpdateInventoryItemDto extends PartialType(CreateInventoryItemDto) {}

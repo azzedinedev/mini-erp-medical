@@ -8,6 +8,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 
 async function bootstrap(): Promise<void> {
+  Object.defineProperty(BigInt.prototype, 'toJSON', { value: function toJSON() { return this.toString(); }, configurable: true });
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   const config = app.get(ConfigService);
   app.setGlobalPrefix('api');

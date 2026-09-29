@@ -9,6 +9,8 @@ import { UpdatePatientDto } from './dto/update-patient.dto';
 export class PatientsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async trash() { return this.prisma.patient.findMany({ where: { deletedAt: { not: null } }, orderBy: { updatedAt: 'desc' } }); }
+
   async list(query: PaginationQuery) {
     const where: Prisma.PatientWhereInput = {
       deletedAt: null,

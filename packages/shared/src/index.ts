@@ -6,6 +6,7 @@ export const PERMISSION_ACTIONS = [
   'create',
   'update',
   'delete',
+  'delete_permanent',
   'archive',
   'export',
 ] as const;

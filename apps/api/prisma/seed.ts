@@ -7,7 +7,7 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
 
 const prisma = new PrismaClient();
-const permissionActions = ['view', 'create', 'update', 'delete', 'archive', 'export'];
+const permissionActions = ['view', 'create', 'update', 'delete', 'delete_permanent', 'archive', 'export'];
 const modules = ['patients', 'prescriptions', 'inventory', 'deliveries', 'missions', 'documents', 'medical-staff', 'partners', 'users', 'references', 'finance', 'settings'];
 
 async function main() {

@@ -7,6 +7,8 @@ import { CreateInventoryItemDto, StockMovementDto } from './inventory.dto';
 export class InventoryService {
   constructor(private readonly prisma: PrismaService) {}
 
+  trash() { return this.prisma.inventoryItem.findMany({ where: { deletedAt: { not: null } }, orderBy: { updatedAt: 'desc' } }); }
+
   list(search?: string) {
     return this.prisma.inventoryItem.findMany({ where: { deletedAt: null, ...(search ? { OR: [{ name: { contains: search, mode: 'insensitive' } }, { code: { contains: search, mode: 'insensitive' } }, { sku: { contains: search, mode: 'insensitive' } }] } : {}) }, orderBy: { name: 'asc' } });
   }
@@ -16,6 +18,26 @@ export class InventoryService {
     const number = sequence.nextValue - 1;
     return this.prisma.inventoryItem.create({ data: { code: `INV-${String(number).padStart(6, '0')}`, name: dto.name, sku: dto.sku, category: dto.category, unit: dto.unit, quantity: dto.quantity, minQuantity: dto.minQuantity ?? 0, location: dto.location, barcode: `INV-${String(number).padStart(6, '0')}` } });
   }
+
+  async update(id: string, dto: Partial<CreateInventoryItemDto>) {
+    const item = await this.prisma.inventoryItem.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+    if (!item) throw new NotFoundException('Article introuvable');
+    return this.prisma.inventoryItem.update({ where: { id }, data: { ...dto, quantity: dto.quantity === undefined ? undefined : new Prisma.Decimal(dto.quantity), minQuantity: dto.minQuantity === undefined ? undefined : new Prisma.Decimal(dto.minQuantity) } });
+  }
+
+  async remove(id: string) {
+    const item = await this.prisma.inventoryItem.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+    if (!item) throw new NotFoundException('Article introuvable');
+    return this.prisma.inventoryItem.update({ where: { id }, data: { deletedAt: new Date(), active: false } });
+  }
+
+  async removePermanently(id: string) {
+    const item = await this.prisma.inventoryItem.findUnique({ where: { id }, select: { id: true } });
+    if (!item) throw new NotFoundException('Article introuvable');
+    return this.prisma.inventoryItem.delete({ where: { id } });
+  }
+
+  restore(id: string) { return this.prisma.inventoryItem.update({ where: { id }, data: { deletedAt: null, active: true } }); }
 
   async move(id: string, dto: StockMovementDto) {
     const item = await this.prisma.inventoryItem.findFirst({ where: { id, deletedAt: null } });

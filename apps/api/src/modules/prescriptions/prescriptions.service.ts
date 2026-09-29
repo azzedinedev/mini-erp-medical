@@ -19,6 +19,10 @@ export function canTransitionPrescription(from: PrescriptionStatus, to: Prescrip
 export class PrescriptionsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async trash() {
+    return this.prisma.prescription.findMany({ where: { deletedAt: { not: null } }, include: { patient: true, prescriber: true, items: { include: { medication: true } } }, orderBy: { updatedAt: 'desc' } });
+  }
+
   async list(page = 1, pageSize = 20, search?: string) {
     const where: Prisma.PrescriptionWhereInput = { deletedAt: null, ...(search ? { OR: [{ code: { contains: search, mode: 'insensitive' } }, { patient: { lastName: { contains: search, mode: 'insensitive' } } }] } : {}) };
     const [data, total] = await this.prisma.$transaction([
@@ -50,6 +54,17 @@ export class PrescriptionsService {
     if (!prescription) throw new NotFoundException('Ordonnance introuvable');
     return prescription;
   }
+
+  async update(id: string, dto: Partial<CreatePrescriptionDto>) {
+    const { patientId, prescriberId, instructions, validUntil } = dto;
+    return this.prisma.prescription.update({ where: { id }, data: { patientId, prescriberId, instructions, validUntil: validUntil ? new Date(validUntil) : undefined } });
+  }
+
+  async remove(id: string) {
+    return this.prisma.prescription.update({ where: { id }, data: { deletedAt: new Date() } });
+  }
+  removePermanently(id: string) { return this.prisma.prescription.delete({ where: { id } }); }
+  restore(id: string) { return this.prisma.prescription.update({ where: { id }, data: { deletedAt: null } }); }
 
   async sign(id: string, dto: SignPrescriptionDto, signerId: string) {
     const prescription = await this.prisma.prescription.findUnique({ where: { id } });

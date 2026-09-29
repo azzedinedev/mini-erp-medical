@@ -16,6 +16,10 @@ type RequestWithUser = { user: AuthPrincipal };
 export class PatientsController {
   constructor(private readonly patients: PatientsService) {}
 
+  @Get('trash')
+  @RequirePermission('patients', 'view')
+  trash() { return this.patients.trash(); }
+
   @Get()
   @RequirePermission('patients', 'view')
   list(@Query(new PaginationPipe()) query: PaginationQuery) { return this.patients.list(query); }
@@ -40,11 +44,11 @@ export class PatientsController {
   @RequirePermission('patients', 'update')
   restore(@Param('id') id: string) { return this.patients.restore(id); }
 
+  @Delete(':id/permanent')
+  @RequirePermission('patients', 'delete_permanent')
+  removePermanently(@Param('id') id: string) { return this.patients.removePermanently(id); }
+
   @Delete(':id')
   @RequirePermission('patients', 'delete')
   remove(@Param('id') id: string) { return this.patients.remove(id); }
-
-  @Delete(':id/permanent')
-  @RequirePermission('patients', 'delete')
-  removePermanently(@Param('id') id: string) { return this.patients.removePermanently(id); }
 }

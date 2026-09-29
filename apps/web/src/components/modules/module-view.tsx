@@ -6,7 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import {
   Archive, ArrowDownToLine, ArrowRight, Bandage, BarChart3, Check, ChevronLeft, ChevronRight, CircleAlert, CircleCheck,
   ClipboardCheck, ClipboardList, Download, FilePenLine, FilePlus2, FileText, Files, FolderHeart, FolderOpen, Handshake,
-  HeartPulse, History, ListChecks, LoaderCircle, LockKeyhole, MapPinned, MoreHorizontal, Package, Pencil, Plus, ReceiptText,
+  HeartPulse, History, ListChecks, LoaderCircle, LockKeyhole, Mail, MapPinned, MoreHorizontal, Package, Pencil, Phone, Plus, ReceiptText,
   RotateCcw, Save, ScanLine, Search, Settings2, ShieldCheck, Stethoscope, Syringe, Trash2, Truck, UserRound, UsersRound, X,
   type LucideIcon,
 } from 'lucide-react';
@@ -14,12 +14,12 @@ import { moduleConfigs } from '@/lib/mock-data';
 import { useUiLocale } from '@/lib/ui-i18n';
 import { apiClient, ApiClientError } from '@/lib/api-client';
 import { hasPermission, readSession } from '@/lib/auth-store';
-import { fallbackRecords, loadModuleRecords, type CrudDraft, type ModuleKey, type ModuleRecord } from '@/lib/module-data';
+import { fallbackRecords, loadModuleRecords, loadModuleTrash, type CrudDraft, type ModuleKey, type ModuleRecord } from '@/lib/module-data';
 
 const icons: Record<string, LucideIcon> = { FolderHeart, Syringe, Package, MapPinned, Truck, Files, Stethoscope, Handshake, UsersRound, ListChecks, ReceiptText, Settings2 };
 
 type Config = (typeof moduleConfigs)[ModuleKey];
-type Action = 'view' | 'create' | 'update' | 'archive' | 'delete' | 'export';
+type Action = 'view' | 'create' | 'update' | 'archive' | 'delete' | 'delete_permanent' | 'export';
 
 const permissionModule: Record<ModuleKey, string> = {
   patients: 'patients', prescriptions: 'prescriptions', inventory: 'inventory', missions: 'missions', deliveries: 'deliveries',
@@ -67,6 +67,17 @@ function formatPhone(value: string) {
   const digits = value.replace(/[^\d+]/g, '').slice(0, 16);
   return digits.replace(/(\+\d{2})(\d{1})(\d{2})(\d{2})(\d{2})(\d{2})/, '$1 $2 $3 $4 $5 $6');
 }
+function statusCode(value: string) {
+  const normalized = value.toLowerCase();
+  if (normalized.includes('archiv')) return 'ARCHIVED';
+  if (normalized.includes('brouillon')) return 'DRAFT';
+  if (normalized.includes('sign')) return 'SIGNED';
+  if (normalized.includes('livr')) return 'DELIVERED';
+  if (normalized.includes('cours')) return 'IN_PROGRESS';
+  if (normalized.includes('attente')) return 'PENDING';
+  if (normalized.includes('pay')) return 'PAID';
+  return value || 'ACTIVE';
+}
 
 export function ModuleView({ module }: { module: ModuleKey }) {
   const config = moduleConfigs[module];
@@ -80,6 +91,7 @@ export function ModuleView({ module }: { module: ModuleKey }) {
   const [selected, setSelected] = useState<ModuleRecord | null>(null);
   const [editor, setEditor] = useState<{ mode: 'create' | 'edit'; record?: ModuleRecord } | null>(null);
   const [actionRecord, setActionRecord] = useState<ModuleRecord | null>(null);
+  const [deleteRecord, setDeleteRecord] = useState<ModuleRecord | null>(null);
   const [trashItems, setTrashItems] = useState<ModuleRecord[]>([]);
   const [trashOpen, setTrashOpen] = useState(false);
   const [records, setRecords] = useState<ModuleRecord[]>(() => fallbackRecords(module));
@@ -108,6 +120,14 @@ export function ModuleView({ module }: { module: ModuleKey }) {
         if (active && remote) setRecords(remote);
       }).finally(() => { if (active) setLoading(false); });
     }
+    void loadModuleTrash(module).then((remoteTrash) => {
+      if (!active || !remoteTrash) return;
+      setTrashItems((current) => {
+        const merged = new Map(current.map((item) => [recordKey(item), item]));
+        remoteTrash.forEach((item) => merged.set(recordKey(item), item));
+        return [...merged.values()];
+      });
+    });
     return () => { active = false; };
   }, [config.tabs, initialQuery, module]);
 
@@ -149,37 +169,105 @@ export function ModuleView({ module }: { module: ModuleKey }) {
   async function createRemoteRecord(draft: CrudDraft): Promise<ModuleRecord | null> {
     const { firstName, lastName } = splitName(draft.label);
     if (module === 'patients') {
-      const created = await apiClient.post<Record<string, unknown>>('/patients', { firstName, lastName, phone: draft.phone || undefined, notes: draft.notes || undefined });
-      return { id: String(created.id), remote: true, row: [`${created.firstName ?? firstName} ${created.lastName ?? lastName}|${created.code ?? draft.code}|—|${String(firstName[0] ?? '')}${String(lastName[0] ?? '')}`, 'Dossier patient', '—', 'Actif', 'À l’instant'] };
+      const created = await apiClient.post<Record<string, unknown>>('/patients', { firstName, lastName, phone: draft.phone || undefined, email: draft.email || undefined, notes: draft.notes || undefined });
+      return { id: String(created.id), remote: true, data: created, row: [`${created.firstName ?? firstName} ${created.lastName ?? lastName}|${created.code ?? draft.code}|—|${String(firstName[0] ?? '')}${String(lastName[0] ?? '')}`, 'Dossier patient', '—', 'Actif', 'À l’instant'] };
     }
     if (module === 'inventory') {
-      const created = await apiClient.post<Record<string, unknown>>('/inventory', { name: draft.label, category: 'À classer', unit: 'unité', quantity: 0, minQuantity: 0 });
-      return { id: String(created.id), remote: true, row: [`${created.code ?? draft.code}|${created.name ?? draft.label}|À classer`, 'À classer', '0 unité / min. 0', 'À définir', 'Disponible'] };
+      const created = await apiClient.post<Record<string, unknown>>('/inventory', { name: draft.label, category: draft.category || 'À classer', unit: draft.unit || 'unité', quantity: 0, minQuantity: 0, location: draft.notes || undefined });
+      return { id: String(created.id), remote: true, data: created, row: [`${created.code ?? draft.code}|${created.name ?? draft.label}|${draft.category || 'À classer'}`, draft.category || 'À classer', `0 ${draft.unit || 'unité'} / min. 0`, 'À définir', 'Disponible'] };
     }
     if (module === 'missions') {
-      const created = await apiClient.post<Record<string, unknown>>('/missions', { title: draft.label, scheduledAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(), notes: draft.notes || undefined });
-      return { id: String(created.id), remote: true, row: [`${created.code ?? draft.code}|${draft.label}`, 'À affecter', 'À affecter', 'À planifier', 'Planifiée'] };
+      const created = await apiClient.post<Record<string, unknown>>('/missions', { title: draft.label, scheduledAt: draft.scheduledAt ? new Date(draft.scheduledAt).toISOString() : new Date(Date.now() + 60 * 60 * 1000).toISOString(), notes: draft.notes || undefined });
+      return { id: String(created.id), remote: true, data: created, row: [`${created.code ?? draft.code}|${draft.label}`, 'À affecter', 'À affecter', 'À planifier', 'Planifiée'] };
+    }
+    if (module === 'deliveries') {
+      const created = await apiClient.post<Record<string, unknown>>('/deliveries', { scheduledAt: draft.scheduledAt ? new Date(draft.scheduledAt).toISOString() : undefined, trackingNote: draft.notes || undefined });
+      return { id: String(created.id), remote: true, data: created, row: [`${created.code ?? draft.code}|Bordereau`, 'À affecter', '—', draft.scheduledAt || 'À planifier', 'En attente'] };
+    }
+    if (module === 'documents') {
+      const created = await apiClient.post<Record<string, unknown>>('/documents/metadata', { title: draft.label, category: draft.category || 'Document', entityType: 'OTHER', fileName: `${draft.label.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.txt`, mimeType: 'text/plain', storageKey: `local/${Date.now()}.txt`, sizeBytes: 0, metadata: { notes: draft.notes || undefined } });
+      return { id: String(created.id), remote: true, data: created, row: [`${created.fileName ?? draft.label}|${created.title ?? draft.label}`, String(created.category ?? 'Document'), '—', 'v1', 'À l’instant'] };
+    }
+    if (module === 'team') {
+      const created = await apiClient.post<Record<string, unknown>>('/medical-staff', { firstName, lastName, staffType: 'OTHER', specialty: draft.category || undefined, phone: draft.phone || undefined, email: draft.email || undefined });
+      return { id: String(created.id), remote: true, data: created, row: [`${created.firstName ?? firstName} ${created.lastName ?? lastName}|${created.specialty ?? draft.category ?? '—'}|${String(firstName[0] ?? '')}${String(lastName[0] ?? '')}`, 'Équipe médicale', String(created.specialty ?? draft.category ?? '—'), 'À définir', 'Actif'] };
+    }
+    if (module === 'partners') {
+      const created = await apiClient.post<Record<string, unknown>>('/partners', { name: draft.label, kind: draft.category || 'Partenaire', contactName: `${firstName} ${lastName}`, phone: draft.phone || undefined, email: draft.email || undefined, notes: draft.notes || undefined });
+      return { id: String(created.id), remote: true, data: created, row: [`${created.name ?? draft.label}|${created.kind ?? draft.category ?? 'Partenaire'}|${String(firstName[0] ?? '')}${String(lastName[0] ?? '')}`, String(created.kind ?? 'Partenaire'), String(created.contactName ?? 'Contact à renseigner'), 'À l’instant', 'Actif'] };
+    }
+    if (module === 'users') {
+      const created = await apiClient.post<Record<string, unknown>>('/users', { firstName, lastName, email: draft.email || `${firstName.toLowerCase()}.${lastName.toLowerCase()}@mediflow.local`, phone: draft.phone || undefined, password: 'ChangeMe!2025' });
+      return { id: String(created.id), remote: true, data: created, row: [`${created.firstName ?? firstName} ${created.lastName ?? lastName}|${created.email ?? draft.email}|${String(firstName[0] ?? '')}${String(lastName[0] ?? '')}`, 'Invitation', 'À l’instant', 'Non activée', 'Invitation en attente'] };
+    }
+    if (module === 'prescriptions') {
+      const created = await apiClient.post<Record<string, unknown>>('/prescriptions', { patientId: draft.patientId, prescriberId: draft.prescriberId, instructions: draft.notes || undefined, items: [{ manualName: draft.label, dosage: draft.category || undefined, instructions: draft.notes || undefined }] });
+      return { id: String(created.id), remote: true, data: created, row: [`${created.code ?? draft.code}|${draft.label}|${draft.patientId}`, `${draft.label}|${draft.patientId}`, 'Prescripteur', 'À l’instant', 'Brouillon'] };
     }
     if (module === 'references') {
       const created = await apiClient.post<Record<string, unknown>>('/reference-data/types', { kind: 'CONSULTATION', code: draft.code || `REF-${Date.now()}`, labels: { fr: draft.label, en: draft.label, ar: draft.label, es: draft.label }, icon: 'ListChecks' });
-      return { id: String(created.id), remote: true, row: [`${draft.label}|${created.code ?? draft.code}|ListChecks`, 'Type d’acte', String(created.code ?? draft.code), 'À l’instant', 'Actif'] };
+      return { id: String(created.id), remote: true, data: created, row: [`${draft.label}|${created.code ?? draft.code}|ListChecks`, 'Type d’acte', String(created.code ?? draft.code), 'À l’instant', 'Actif'] };
     }
     if (module === 'finance') {
       const created = await apiClient.post<Record<string, unknown>>('/finance', { kind: draft.label, currency: 'EUR', lines: [{ label: draft.label, quantity: 1, unitPriceHt: 0, vatRate: 20 }] });
-      return { id: String(created.id), remote: true, row: [`${created.code ?? draft.code}|${draft.label}`, 'À facturer', 'À l’instant', '0 EUR', 'Brouillon'] };
+      return { id: String(created.id), remote: true, data: created, row: [`${created.code ?? draft.code}|${draft.label}`, 'À facturer', 'À l’instant', '0 EUR', 'Brouillon'] };
     }
     return null;
   }
 
   async function updateRemoteRecord(record: ModuleRecord, draft: CrudDraft): Promise<ModuleRecord | null> {
-    if (!record.id || module !== 'patients') return null;
+    if (!record.id) return null;
     const { firstName, lastName } = splitName(draft.label);
-    const updated = await apiClient.patch<Record<string, unknown>>(`/patients/${record.id}`, { firstName, lastName, phone: draft.phone || undefined, notes: draft.notes || undefined });
-    return { ...record, remote: true, row: [`${updated.firstName ?? firstName} ${updated.lastName ?? lastName}|${updated.code ?? draft.code}|—|${String(firstName[0] ?? '')}${String(lastName[0] ?? '')}`, record.row[1] ?? 'Dossier patient', record.row[2] ?? '—', record.row[3] ?? 'Actif', 'À l’instant'] };
+    if (module === 'patients') {
+      const updated = await apiClient.patch<Record<string, unknown>>(`/patients/${record.id}`, { firstName, lastName, phone: draft.phone || undefined, email: draft.email || undefined, notes: draft.notes || undefined });
+      return { ...record, remote: true, data: updated, row: [`${updated.firstName ?? firstName} ${updated.lastName ?? lastName}|${updated.code ?? draft.code}|—|${String(firstName[0] ?? '')}${String(lastName[0] ?? '')}`, record.row[1] ?? 'Dossier patient', '—', draft.status || record.row[3] || 'Actif', 'À l’instant'] };
+    }
+    if (module === 'inventory') {
+      const updated = await apiClient.patch<Record<string, unknown>>(`/inventory/${record.id}`, { name: draft.label, category: draft.category || undefined, unit: draft.unit || undefined, location: draft.notes || undefined });
+      return { ...record, remote: true, data: updated, row: [`${updated.code ?? draft.code}|${updated.name ?? draft.label}|${updated.category ?? draft.category}`, String((updated.category ?? draft.category) || '—'), `${updated.quantity ?? 0} ${updated.unit ?? draft.unit}`, String(updated.location ?? '—'), 'Disponible'] };
+    }
+    if (module === 'missions') {
+      const updated = await apiClient.patch<Record<string, unknown>>(`/missions/${record.id}`, { title: draft.label, scheduledAt: draft.scheduledAt ? new Date(draft.scheduledAt).toISOString() : undefined, notes: draft.notes || undefined });
+      return { ...record, remote: true, data: updated, row: [`${updated.code ?? draft.code}|${updated.title ?? draft.label}`, record.row[1] ?? 'À affecter', record.row[2] ?? 'À affecter', draft.scheduledAt || record.row[3] || 'À planifier', draft.status || record.row[4] || 'Planifiée'] };
+    }
+    if (module === 'deliveries') {
+      const updated = await apiClient.patch<Record<string, unknown>>(`/deliveries/${record.id}`, { scheduledAt: draft.scheduledAt ? new Date(draft.scheduledAt).toISOString() : undefined, trackingNote: draft.notes || undefined, status: draft.status });
+      return { ...record, remote: true, data: updated, row: [`${updated.code ?? draft.code}|Bordereau`, record.row[1] ?? 'À affecter', record.row[2] ?? '—', draft.scheduledAt || record.row[3] || 'À planifier', draft.status || record.row[4] || 'En attente'] };
+    }
+    if (module === 'documents') {
+      const updated = await apiClient.patch<Record<string, unknown>>(`/documents/${record.id}`, { title: draft.label, category: draft.category || undefined, metadata: { notes: draft.notes || undefined } });
+      return { ...record, remote: true, data: updated, row: [`${updated.fileName ?? draft.label}|${updated.title ?? draft.label}`, String(updated.category ?? draft.category), String(record.row[2] ?? '—'), String(record.row[3] ?? 'v1'), 'À l’instant'] };
+    }
+    if (module === 'team') {
+      const updated = await apiClient.patch<Record<string, unknown>>(`/medical-staff/${record.id}`, { firstName, lastName, specialty: draft.category || undefined, phone: draft.phone || undefined, email: draft.email || undefined });
+      return { ...record, remote: true, data: updated, row: [`${updated.firstName ?? firstName} ${updated.lastName ?? lastName}|${updated.specialty ?? draft.category}|${String(firstName[0] ?? '')}${String(lastName[0] ?? '')}`, record.row[1] ?? 'Équipe médicale', String(updated.specialty ?? draft.category), record.row[3] ?? 'À définir', draft.status || 'Actif'] };
+    }
+    if (module === 'partners') {
+      const updated = await apiClient.patch<Record<string, unknown>>(`/partners/${record.id}`, { name: draft.label, kind: draft.category || undefined, phone: draft.phone || undefined, email: draft.email || undefined, notes: draft.notes || undefined });
+      return { ...record, remote: true, data: updated, row: [`${updated.name ?? draft.label}|${updated.kind ?? draft.category}|${String(firstName[0] ?? '')}${String(lastName[0] ?? '')}`, String(updated.kind ?? draft.category), record.row[2] ?? 'Contact à renseigner', 'À l’instant', draft.status || 'Actif'] };
+    }
+    if (module === 'users') {
+      const updated = await apiClient.patch<Record<string, unknown>>(`/users/${record.id}`, { firstName, lastName, email: draft.email || undefined, phone: draft.phone || undefined });
+      return { ...record, remote: true, data: updated, row: [`${updated.firstName ?? firstName} ${updated.lastName ?? lastName}|${updated.email ?? draft.email}|${String(firstName[0] ?? '')}${String(lastName[0] ?? '')}`, record.row[1] ?? 'Invitation', record.row[2] ?? 'À l’instant', record.row[3] ?? 'Non activée', draft.status || 'Actif'] };
+    }
+    if (module === 'references') {
+      const endpoint = record.row[1]?.toLowerCase().includes('médicament') ? 'medications' : 'types';
+      const updated = await apiClient.patch<Record<string, unknown>>(`/reference-data/${endpoint}/${record.id}`, endpoint === 'medications' ? { name: draft.label, form: draft.category || undefined } : { code: draft.code, labels: { fr: draft.label }, icon: 'ListChecks' });
+      return { ...record, remote: true, data: updated, row: endpoint === 'medications' ? [`${updated.name ?? draft.label}|${updated.code ?? draft.code}|${updated.form ?? draft.category}`, 'Médicament', String(updated.code ?? draft.code), 'À l’instant', 'Actif'] : [`${draft.label}|${updated.code ?? draft.code}|ListChecks`, 'Type d’acte', String(updated.code ?? draft.code), 'À l’instant', 'Actif'] };
+    }
+    if (module === 'finance') {
+      const updated = await apiClient.patch<Record<string, unknown>>(`/finance/${record.id}`, { kind: draft.label, currency: 'EUR', status: draft.status, notes: draft.notes || undefined });
+      return { ...record, remote: true, data: updated, row: [`${updated.code ?? draft.code}|${draft.label}`, record.row[1] ?? 'À facturer', 'À l’instant', record.row[3] ?? '0 EUR', draft.status || 'Brouillon'] };
+    }
+    if (module === 'prescriptions') {
+      const updated = await apiClient.patch<Record<string, unknown>>(`/prescriptions/${record.id}`, { patientId: draft.patientId, prescriberId: draft.prescriberId, instructions: draft.notes || undefined });
+      return { ...record, remote: true, data: updated, row: [`${updated.code ?? draft.code}|${draft.label}|${draft.patientId}`, `${draft.label}|${draft.patientId}`, record.row[2] ?? 'Prescripteur', record.row[3] ?? 'À l’instant', draft.status || record.row[4] || 'Brouillon'] };
+    }
+    return null;
   }
 
   async function saveRecord(row: string[], mode: 'create' | 'edit', draft: CrudDraft, initial?: ModuleRecord) {
-    let next: ModuleRecord = { id: initial?.id, remote: initial?.remote, row };
+    let next: ModuleRecord = { id: initial?.id, remote: initial?.remote, data: { ...(initial?.data ?? {}), ...draft }, row };
     try {
       const remote = mode === 'create' ? await createRemoteRecord(draft) : await updateRemoteRecord(initial ?? next, draft);
       if (remote) next = remote;
@@ -196,45 +284,84 @@ export function ModuleView({ module }: { module: ModuleKey }) {
 
   async function archiveRemote(record: ModuleRecord) {
     if (!record.id || !record.remote) return;
-    if (module === 'patients') await apiClient.delete(`/patients/${record.id}`);
-    else if (module === 'users' || module === 'team' || module === 'partners') await apiClient.delete(`/${module === 'team' ? 'medical-staff' : module}/${record.id}`);
+    if (module === 'patients' && can('archive') && !can('delete')) {
+      await apiClient.post(`/patients/${record.id}/archive`, {});
+      return;
+    }
+    const endpoints: Partial<Record<ModuleKey, string>> = { patients: 'patients', prescriptions: 'prescriptions', inventory: 'inventory', missions: 'missions', deliveries: 'deliveries', documents: 'documents', team: 'medical-staff', partners: 'partners', users: 'users', finance: 'finance' };
+    if (module === 'references') {
+      const endpoint = record.row[1]?.toLowerCase().includes('médicament') ? 'medications' : 'types';
+      await apiClient.delete(`/reference-data/${endpoint}/${record.id}`);
+      return;
+    }
+    const endpoint = endpoints[module];
+    if (endpoint) await apiClient.delete(`/${endpoint}/${record.id}`);
   }
 
-  function moveToTrash(record: ModuleRecord) {
+  function requestDelete(record: ModuleRecord) {
     if (!can('delete') && !can('archive')) { notify('Vous ne disposez pas de la permission de suppression.'); return; }
-    setRecords((current) => current.filter((item) => recordKey(item) !== recordKey(record)));
-    setTrashItems((current) => [...current, record]);
     setActionRecord(null);
-    const remoteArchive = Boolean(record.remote && record.id && ['patients', 'users', 'team', 'partners'].includes(module));
-    void archiveRemote(record).catch((error) => notify(error instanceof ApiClientError ? `Retiré localement : ${error.message}` : 'Retiré localement, synchronisation à réessayer'));
-    notify(remoteArchive ? `${titleOf(record)} placé dans la corbeille et synchronisé` : `${titleOf(record)} placé dans la corbeille locale; API de suppression à compléter pour ce module`);
+    setDeleteRecord(record);
+  }
+
+  async function moveToTrash(record: ModuleRecord, reason = '') {
+    const trashed = reason.trim() ? { ...record, deletionReason: reason.trim(), deletedAt: new Date().toISOString() } : { ...record, deletedAt: new Date().toISOString() };
+    setActionRecord(null);
+    try {
+      await archiveRemote(trashed);
+      setRecords((current) => current.filter((item) => recordKey(item) !== recordKey(record)));
+      setTrashItems((current) => [...current.filter((item) => recordKey(item) !== recordKey(record)), trashed]);
+      notify(trashed.remote && trashed.id ? `${titleOf(record)} placé dans la corbeille et synchronisé` : `${titleOf(record)} placé dans la corbeille locale`);
+    } catch (error) {
+      setRecords((current) => current.filter((item) => recordKey(item) !== recordKey(record)));
+      setTrashItems((current) => [...current.filter((item) => recordKey(item) !== recordKey(record)), trashed]);
+      notify(error instanceof ApiClientError ? `Retiré localement : ${error.message}` : 'Retiré localement, synchronisation à réessayer');
+    }
   }
 
   async function restoreRemote(record: ModuleRecord) {
     if (!record.id || !record.remote) return;
-    if (module === 'patients') await apiClient.post(`/patients/${record.id}/restore`, {});
+    if (module === 'references') {
+      const endpoint = record.row[1]?.toLowerCase().includes('médicament') ? 'medications' : 'types';
+      await apiClient.post(`/reference-data/${endpoint}/${record.id}/restore`, {});
+      return;
+    }
+    const endpoints: Partial<Record<ModuleKey, string>> = { patients: 'patients', prescriptions: 'prescriptions', inventory: 'inventory', missions: 'missions', deliveries: 'deliveries', documents: 'documents', team: 'medical-staff', partners: 'partners', users: 'users', finance: 'finance' };
+    const endpoint = endpoints[module];
+    if (endpoint) await apiClient.post(`/${endpoint}/${record.id}/restore`, {});
   }
 
-  function restoreRecord(record: ModuleRecord) {
+  async function restoreRecord(record: ModuleRecord) {
     if (!can('update') && !can('delete')) { notify('Vous ne disposez pas de la permission de restaurer cet élément.'); return; }
-    setTrashItems((current) => current.filter((item) => recordKey(item) !== recordKey(record)));
-    setRecords((current) => [...current, record]);
-    const remoteRestore = Boolean(record.remote && record.id && module === 'patients');
-    void restoreRemote(record).catch(() => notify('Restauré localement, synchronisation à réessayer'));
-    notify(remoteRestore ? `${titleOf(record)} restauré et synchronisé` : `${titleOf(record)} restauré localement; API de restauration à compléter pour ce module`);
+    try {
+      await restoreRemote(record);
+      setTrashItems((current) => current.filter((item) => recordKey(item) !== recordKey(record)));
+      setRecords((current) => [...current, { ...record, deletedAt: undefined }]);
+      notify(record.remote && record.id ? `${titleOf(record)} restauré et synchronisé` : `${titleOf(record)} restauré localement`);
+    } catch (error) {
+      notify(error instanceof ApiClientError ? `Restauration impossible : ${error.message}` : 'Restauration impossible, veuillez réessayer');
+    }
   }
 
   async function emptyTrash() {
-    if (!can('delete')) { notify('Vous ne disposez pas de la permission de suppression définitive.'); return; }
+    if (!can('delete_permanent')) { notify('Vous ne disposez pas de la permission de suppression définitive.'); return; }
     if (!window.confirm('Supprimer définitivement les éléments de la corbeille ? Cette action est irréversible.')) return;
     const remoteItems = trashItems.filter((record) => record.remote && record.id);
-    setTrashItems([]);
-    setTrashOpen(false);
     try {
-      if (module === 'patients') await Promise.all(remoteItems.map((record) => apiClient.delete(`/patients/${record.id}/permanent`)));
-      notify(module === 'patients' || remoteItems.length === 0 ? 'Corbeille vidée' : 'Corbeille locale vidée; la suppression définitive API est disponible pour les patients uniquement');
+      const endpoint = module === 'references' ? undefined : ({ patients: 'patients', prescriptions: 'prescriptions', inventory: 'inventory', missions: 'missions', deliveries: 'deliveries', documents: 'documents', team: 'medical-staff', partners: 'partners', users: 'users', finance: 'finance' } as Partial<Record<ModuleKey, string>>)[module];
+      if (module === 'references') {
+        await Promise.all(remoteItems.map((record) => {
+          const referenceEndpoint = record.row[1]?.toLowerCase().includes('médicament') ? 'medications' : 'types';
+          return apiClient.delete(`/reference-data/${referenceEndpoint}/${record.id}/permanent`);
+        }));
+      } else if (endpoint) {
+        await Promise.all(remoteItems.map((record) => apiClient.delete(`/${endpoint}/${record.id}/permanent`)));
+      }
+      setTrashItems([]);
+      setTrashOpen(false);
+      notify('Corbeille vidée');
     } catch (error) {
-      notify(error instanceof ApiClientError ? `Corbeille locale vidée : ${error.message}` : 'Corbeille locale vidée; certaines suppressions restent à synchroniser');
+      notify(error instanceof ApiClientError ? `Corbeille vidée localement : ${error.message}` : 'Corbeille vidée localement; certaines suppressions restent à synchroniser');
     }
   }
 
@@ -255,28 +382,38 @@ export function ModuleView({ module }: { module: ModuleKey }) {
     {config.stats.length > 0 && <section className="module-stats">{config.stats.map(([label, value, hint]) => <div className="module-stat" key={label}><div className="module-stat__label">{t(label)}</div><div className="module-stat__value">{value}</div><div className="module-stat__hint">{t(hint)}</div></div>)}</section>}
     <section className="card module-list-card"><div className="module-toolbar"><div className="filter-search"><Search /><input value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder={`${t('Rechercher')} dans ${t(config.title).toLowerCase()}...`} aria-label={`${t('Rechercher')} dans ${t(config.title)}`} /></div><div className="filter-tabs">{config.tabs.map((tab) => <button className={`filter-tab ${activeTab === tab ? 'is-active' : ''}`} key={tab} onClick={() => { setActiveTab(tab); setPage(1); }}>{t(tab)}</button>)}</div><button className="btn btn-secondary" onClick={() => { setQuery(''); setActiveTab(config.tabs[0]); setPage(1); notify('Filtres réinitialisés'); }}><ListChecks /> {t('Filtres')}</button></div>
       {loading && <div className="sync-status"><LoaderCircle className="spin" /> Synchronisation avec MediFlow…</div>}
-      {visibleRecords.length === 0 ? <div className="empty-state"><div className="empty-state__icon"><Search /></div><h3>Aucun résultat</h3><p>Modifiez votre recherche ou vos filtres pour retrouver une entrée.</p></div> : <div className="table-wrap"><table className="data-table"><thead><tr>{config.columns.map((column) => <th key={column}>{t(column)}</th>)}<th aria-label={t('Actions')}>{t('Actions')}</th></tr></thead><tbody>{visibleRecords.map((record) => <tr key={recordKey(record)} onClick={() => module === 'patients' ? setSelected(record) : undefined} className={module === 'patients' ? 'cursor-pointer' : ''}><td><PrimaryCell value={record.row[0] ?? ''} module={module} /></td>{record.row.slice(1).map((cell, cellIndex) => <td key={`${cell}-${cellIndex}`}>{cellIndex === record.row.length - 2 ? <Status value={cell} label={t(cell)} /> : (cell.includes('|') && ['prescriptions', 'missions', 'deliveries'].includes(module) && cellIndex === 0 ? <PrimaryCell value={cell} module="patients" /> : cell)}</td>)}<td><button className="icon-button action-icon action-icon--more" aria-label={`${t('Actions')} ${titleOf(record)}`} title={t('Actions')} onClick={(event) => { event.stopPropagation(); setActionRecord(record); }}><MoreHorizontal /></button></td></tr>)}</tbody></table></div>}
+      {visibleRecords.length === 0 ? <div className="empty-state"><div className="empty-state__icon"><Search /></div><h3>Aucun résultat</h3><p>Modifiez votre recherche ou vos filtres pour retrouver une entrée.</p></div> : <div className="table-wrap"><table className="data-table"><thead><tr>{config.columns.map((column) => <th key={column}>{t(column)}</th>)}<th aria-label={t('Actions')}>{t('Actions')}</th></tr></thead><tbody>{visibleRecords.map((record) => <tr key={recordKey(record)} onClick={() => setSelected(record)} className="cursor-pointer"><td><PrimaryCell value={record.row[0] ?? ''} module={module} /></td>{record.row.slice(1).map((cell, cellIndex) => <td key={`${cell}-${cellIndex}`}>{cellIndex === record.row.length - 2 ? <Status value={cell} label={t(cell)} /> : (cell.includes('|') && ['prescriptions', 'missions', 'deliveries'].includes(module) && cellIndex === 0 ? <PrimaryCell value={cell} module="patients" /> : cell)}</td>)}<td><button className="icon-button action-icon action-icon--more" aria-label={`${t('Actions')} ${titleOf(record)}`} title={t('Actions')} onClick={(event) => { event.stopPropagation(); setActionRecord(record); }}><MoreHorizontal /></button></td></tr>)}</tbody></table></div>}
       <div className="table-footer"><span className="table-footer__count">{filtered.length} résultat{filtered.length > 1 ? 's' : ''} · {loading ? 'synchronisation…' : 'enregistré localement'}</span><div className="pagination"><button aria-label="Page précédente" disabled={page <= 1} onClick={() => setPageAndClamp(page - 1)}><ChevronLeft /></button><button className="is-current">{page}</button><button aria-label="Page suivante" disabled={page >= pageCount} onClick={() => setPageAndClamp(page + 1)}><ChevronRight /></button></div></div>
     </section>
-    {selected && (module === 'patients' ? <PatientDrawer patient={selected.row[0] ?? ''} canEdit={can('update')} onClose={() => setSelected(null)} onNotify={notify} onEdit={() => { setSelected(null); openEdit(selected); }} /> : <RecordDetailsDialog record={selected} config={config} t={t} onClose={() => setSelected(null)} />)}
-    {actionRecord && <ActionSheet record={actionRecord} t={t} can={can} onClose={() => setActionRecord(null)} onView={() => { setSelected(actionRecord); setActionRecord(null); }} onEdit={() => openEdit(actionRecord)} onArchive={() => moveToTrash(actionRecord)} onDelete={() => moveToTrash(actionRecord)} />}
+    {selected && (module === 'patients' ? <PatientDrawer record={selected} canEdit={can('update')} onClose={() => setSelected(null)} onNotify={notify} onEdit={() => { setSelected(null); openEdit(selected); }} /> : <RecordDetailsDialog record={selected} config={config} t={t} onClose={() => setSelected(null)} />)}
+    {actionRecord && <ActionSheet module={module} record={actionRecord} t={t} can={can} onClose={() => setActionRecord(null)} onView={() => { setSelected(actionRecord); setActionRecord(null); }} onEdit={() => openEdit(actionRecord)} onArchive={() => requestDelete(actionRecord)} onDelete={() => requestDelete(actionRecord)} />}
     {editor && <CrudDialog key={`${editor.mode}-${recordKey(editor.record ?? { row: ['new'] })}`} module={module} config={config} mode={editor.mode} initial={editor.record} t={t} onClose={() => setEditor(null)} onSave={(row, mode, draft) => saveRecord(row, mode, draft, editor.record)} />}
+    {deleteRecord && <DeleteConfirmDialog record={deleteRecord} t={t} onClose={() => setDeleteRecord(null)} onConfirm={(reason) => { const record = deleteRecord; setDeleteRecord(null); moveToTrash(record, reason); }} />}
     {trashOpen && <TrashDialog items={trashItems} t={t} onClose={() => setTrashOpen(false)} onRestore={restoreRecord} onEmpty={emptyTrash} />}
     {toast && <div className="toast" role="status"><CircleCheck />{toast}</div>}
   </div>;
 }
 
-function ActionSheet({ record, t, can, onClose, onView, onEdit, onArchive, onDelete }: { record: ModuleRecord; t: (value: string) => string; can: (action: Action) => boolean; onClose: () => void; onView: () => void; onEdit: () => void; onArchive: () => void; onDelete: () => void }) {
+function ActionSheet({ module, record, t, can, onClose, onView, onEdit, onArchive, onDelete }: { module: ModuleKey; record: ModuleRecord; t: (value: string) => string; can: (action: Action) => boolean; onClose: () => void; onView: () => void; onEdit: () => void; onArchive: () => void; onDelete: () => void }) {
   const title = titleOf(record);
-  return <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}><section className="action-sheet glass-panel" role="dialog" aria-modal="true" aria-labelledby="action-sheet-title" onMouseDown={(event) => event.stopPropagation()}><div className="dialog__header"><div><div className="eyebrow">Actions</div><h2 id="action-sheet-title">{title}</h2><p>Chaque action est enregistrée localement et synchronisée avec l’API quand elle est disponible.</p></div><button className="icon-button" aria-label={t('Fermer')} onClick={onClose}><X /></button></div><div className="action-grid">{can('view') && <button className="action-tile action-tile--view" onClick={onView}><ClipboardCheck /><span>{t('Consulter')}</span><small>Ouvrir la fiche détaillée</small></button>}{can('update') && <button className="action-tile action-tile--edit" onClick={onEdit}><FilePenLine /><span>{t('Modifier')}</span><small>Éditer avec validation</small></button>}{can('archive') && <button className="action-tile action-tile--archive" onClick={onArchive}><Archive /><span>{t('Archiver')}</span><small>Retirer des listes actives</small></button>}{can('delete') && <button className="action-tile action-tile--delete" onClick={onDelete}><Trash2 /><span>{t('Supprimer')}</span><small>Déplacer vers la corbeille</small></button>}</div></section></div>;
+  return <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}><section className="action-sheet glass-panel" role="dialog" aria-modal="true" aria-labelledby="action-sheet-title" onMouseDown={(event) => event.stopPropagation()}><div className="dialog__header"><div><div className="eyebrow">Actions</div><h2 id="action-sheet-title">{title}</h2><p>Chaque action est enregistrée localement et synchronisée avec l’API quand elle est disponible.</p></div><button className="icon-button" aria-label={t('Fermer')} onClick={onClose}><X /></button></div><div className="action-grid">{can('view') && <button className="action-tile action-tile--view" onClick={onView}><ClipboardCheck /><span>{t('Consulter')}</span><small>Ouvrir la fiche détaillée</small></button>}{can('update') && <button className="action-tile action-tile--edit" onClick={onEdit}><FilePenLine /><span>{t('Modifier')}</span><small>Éditer avec validation</small></button>}{['patients', 'team', 'partners', 'users'].includes(module) && can('archive') && <button className="action-tile action-tile--archive" onClick={onArchive}><Archive /><span>{t('Archiver')}</span><small>Retirer des listes actives</small></button>}{can('delete') && <button className="action-tile action-tile--delete" onClick={onDelete}><Trash2 /><span>{t('Supprimer')}</span><small>Déplacer vers la corbeille</small></button>}</div></section></div>;
 }
 
 function CrudDialog({ module, config, mode, initial, t, onClose, onSave }: { module: ModuleKey; config: Config; mode: 'create' | 'edit'; initial?: ModuleRecord; t: (value: string) => string; onClose: () => void; onSave: (row: string[], mode: 'create' | 'edit', draft: CrudDraft) => Promise<void> | void }) {
   const parts = initial?.row[0]?.split('|') ?? [];
-  const [label, setLabel] = useState(parts[0] ?? '');
-  const [code, setCode] = useState(parts[1] ?? (module === 'patients' ? 'PAT-000000' : `${module.slice(0, 3).toUpperCase()}-${String(Date.now()).slice(-6)}`));
-  const [phone, setPhone] = useState('');
-  const [notes, setNotes] = useState('');
+  const source = initial?.data ?? {};
+  const initialLabel = source.name ?? source.title ?? (source.firstName && source.lastName ? `${source.firstName} ${source.lastName}` : undefined) ?? parts[0] ?? '';
+  const [label, setLabel] = useState(String(initialLabel));
+  const [code, setCode] = useState(String(source.code ?? parts[1] ?? (module === 'patients' ? 'PAT-000000' : `${module.slice(0, 3).toUpperCase()}-${String(Date.now()).slice(-6)}`)));
+  const [phone, setPhone] = useState(String(source.phone ?? ''));
+  const [email, setEmail] = useState(String(source.email ?? ''));
+  const [category, setCategory] = useState(String(source.category ?? source.kind ?? ''));
+  const [unit, setUnit] = useState(String(source.unit ?? 'unité'));
+  const [status, setStatus] = useState(statusCode(String(source.status ?? parts.at(-1) ?? 'ACTIVE')));
+  const [scheduledAt, setScheduledAt] = useState(source.scheduledAt ? String(source.scheduledAt).slice(0, 16) : '');
+  const [patientId, setPatientId] = useState(String(source.patientId ?? ''));
+  const [prescriberId, setPrescriberId] = useState(String(source.prescriberId ?? ''));
+  const [notes, setNotes] = useState(String(source.notes ?? ''));
   const [tab, setTab] = useState<'identity' | 'analysis' | 'care' | 'notes'>('identity');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -286,28 +423,51 @@ function CrudDialog({ module, config, mode, initial, t, onClose, onSave }: { mod
     if (!label.trim()) { setError('Le libellé ou le nom est obligatoire.'); setTab('identity'); return; }
     if (module === 'patients' && !/^PAT-\d{6}$/i.test(code.trim())) { setError('Le code patient doit respecter le format PAT-000000.'); setTab('identity'); return; }
     const identity = `${label.trim()}|${code.trim().toUpperCase()}|${parts[2] ?? label.trim().split(' ').map((item) => item[0]).join('').slice(0, 2).toUpperCase()}`;
-    const next = initial ? [...initial.row] : Array.from({ length: Math.max(config.columns.length, 2) }, (_, index) => index === 0 ? identity : index === config.columns.length - 1 ? 'Actif' : index === 1 ? 'À renseigner' : 'À renseigner');
+    const next = initial ? [...initial.row] : Array.from({ length: Math.max(config.columns.length, 2) }, (_, index) => index === 0 ? identity : index === config.columns.length - 1 ? status : index === 1 ? 'À renseigner' : 'À renseigner');
     next[0] = identity;
+    if (next.length > 1) next[next.length - 1] = status;
     if (initial && next.length > 1 && notes) next[1] = notes;
-    const draft = { label: label.trim(), code: code.trim().toUpperCase(), phone, notes };
+    if (module === 'prescriptions' && (!patientId.trim() || !prescriberId.trim())) { setError('Les identifiants patient et prescripteur sont obligatoires pour une ordonnance.'); setTab('identity'); return; }
+    const draft: CrudDraft = { label: label.trim(), code: code.trim().toUpperCase(), phone, email: email.trim(), category: category.trim(), unit: unit.trim() || 'unité', status, scheduledAt, patientId: patientId.trim(), prescriberId: prescriberId.trim(), notes: notes.trim() };
     setPending(true);
     try { await onSave(next, mode, draft); } finally { setPending(false); }
   }
-  return <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}><section className="dialog glass-panel crud-dialog" role="dialog" aria-modal="true" aria-labelledby="crud-dialog-title" onMouseDown={(event) => event.stopPropagation()}><div className="dialog__header"><div><div className="eyebrow">{mode === 'create' ? 'Nouveau workflow' : 'Fiche sécurisée'}</div><h2 id="crud-dialog-title">{title}</h2><p>Les champs marqués d’un astérisque sont obligatoires. Les modifications sont persistées avant synchronisation.</p></div><button className="icon-button" type="button" aria-label={t('Fermer')} onClick={onClose}><X /></button></div><div className="dialog-tabs"><button className={tab === 'identity' ? 'is-active' : ''} type="button" onClick={() => setTab('identity')}><UserRound /> {t('Identité')}</button><button className={tab === 'analysis' ? 'is-active' : ''} type="button" onClick={() => setTab('analysis')}><ClipboardCheck /> {t('Analyses')}</button><button className={tab === 'care' ? 'is-active' : ''} type="button" onClick={() => setTab('care')}><HeartPulse /> {t('Soins spéciaux')}</button><button className={tab === 'notes' ? 'is-active' : ''} type="button" onClick={() => setTab('notes')}><FileText /> {t('Notes et remarques')}</button></div><form className="dialog__body" onSubmit={submit}>{tab === 'identity' && <div className="form-grid"><label>Nom ou libellé *<input autoFocus required value={label} onChange={(event) => setLabel(event.target.value)} aria-invalid={Boolean(error)} placeholder="Nom complet ou désignation" /></label><label>Code de référence {module === 'patients' ? '*' : ''}<input required={module === 'patients'} value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} placeholder={module === 'patients' ? 'PAT-000000' : 'CODE-000001'} /></label><label>Téléphone<input value={phone} onChange={(event) => setPhone(formatPhone(event.target.value))} inputMode="tel" placeholder="+33 6 00 00 00 00" /></label><label>Statut<select defaultValue={initial?.row.at(-1) ?? 'Actif'}><option>Actif</option><option>À compléter</option><option>Archivé</option><option>Brouillon</option></select></label><label className="form-grid__full">Étiquette / catégorie<input placeholder="Ajouter une étiquette métier" /></label></div>}{tab === 'analysis' && <div className="workflow-panel"><div className="workflow-panel__intro"><ClipboardCheck /><div><strong>Workflow des analyses</strong><span>Suivez les étapes de prescription, prélèvement, validation et archivage.</span></div></div>{['Demande enregistrée', 'Prélèvement planifié', 'Résultat contrôlé', 'Résultat transmis au patient'].map((step, index) => <label className="workflow-step" key={step}><input type="checkbox" defaultChecked={index === 0} /><span className="workflow-step__number">{index + 1}</span><span><strong>{step}</strong><small>Responsable, date et pièce jointe obligatoires</small></span></label>)}<p className="workflow-panel__hint"><FilePlus2 /> Ajoutez la pièce jointe depuis la gestion documentaire après l’enregistrement du workflow.</p></div>}{tab === 'care' && <div className="workflow-panel"><div className="workflow-panel__intro workflow-panel__intro--coral"><HeartPulse /><div><strong>Soins spéciaux</strong><span>Définissez les précautions et consignes visibles par l’équipe.</span></div></div><div className="care-checks"><label><input type="checkbox" /> Allergie ou intolérance</label><label><input type="checkbox" /> Mobilité réduite</label><label><input type="checkbox" /> Isolement requis</label><label><input type="checkbox" /> Matériel spécifique</label></div><label className="form-grid__full">Consignes de soins<textarea rows={4} placeholder="Précautions, fréquence, matériel, personne à prévenir…" /></label></div>}{tab === 'notes' && <div className="notes-panel"><label>Notes et remarques<textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={7} placeholder="Ajoutez les observations utiles à l’équipe…" /></label><div className="notes-panel__hint"><History /> Chaque modification est historisée et associée à votre utilisateur.</div></div>}{error && <div className="form-error" role="alert"><CircleAlert />{error}</div>}<div className="dialog__footer"><button type="button" className="btn btn-secondary" onClick={onClose}>{t('Annuler')}</button><button type="submit" className="btn btn-primary" disabled={pending}>{pending ? <LoaderCircle className="spin" /> : <Save />} {pending ? 'Enregistrement…' : t('Enregistrer')}</button></div></form></section></div>;
+  return <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}><section className="dialog glass-panel crud-dialog" role="dialog" aria-modal="true" aria-labelledby="crud-dialog-title" onMouseDown={(event) => event.stopPropagation()}><div className="dialog__header"><div><div className="eyebrow">{mode === 'create' ? 'Nouveau workflow' : 'Fiche sécurisée'}</div><h2 id="crud-dialog-title">{title}</h2><p>Les champs marqués d’un astérisque sont obligatoires. Les modifications sont persistées avant synchronisation.</p></div><button className="icon-button" type="button" aria-label={t('Fermer')} onClick={onClose}><X /></button></div><div className="dialog-tabs"><button className={tab === 'identity' ? 'is-active' : ''} type="button" onClick={() => setTab('identity')}><UserRound /> {t('Identité')}</button><button className={tab === 'analysis' ? 'is-active' : ''} type="button" onClick={() => setTab('analysis')}><ClipboardCheck /> {t('Analyses')}</button><button className={tab === 'care' ? 'is-active' : ''} type="button" onClick={() => setTab('care')}><HeartPulse /> {t('Soins spéciaux')}</button><button className={tab === 'notes' ? 'is-active' : ''} type="button" onClick={() => setTab('notes')}><FileText /> {t('Notes et remarques')}</button></div><form className="dialog__body" onSubmit={submit}>{tab === 'identity' && <div className="form-grid"><label>Nom ou libellé *<input autoFocus required value={label} onChange={(event) => setLabel(event.target.value)} aria-invalid={Boolean(error)} placeholder="Nom complet ou désignation" /></label><label>Code de référence {module === 'patients' ? '*' : ''}<input required={module === 'patients'} value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} placeholder={module === 'patients' ? 'PAT-000000' : 'CODE-000001'} /></label>{['patients', 'team', 'partners', 'users'].includes(module) && <label>Téléphone<input value={phone} onChange={(event) => setPhone(formatPhone(event.target.value))} inputMode="tel" placeholder="+33 6 00 00 00 00" /></label>}{['patients', 'team', 'partners', 'users'].includes(module) && <label>Adresse e-mail<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="contact@exemple.fr" /></label>}{['inventory', 'references', 'partners'].includes(module) && <label>Catégorie / type<input value={category} onChange={(event) => setCategory(event.target.value)} placeholder="Catégorie métier" /></label>}{module === 'inventory' && <label>Unité de stock<input value={unit} onChange={(event) => setUnit(event.target.value)} placeholder="unité, boîte, flacon…" /></label>}{['missions', 'deliveries'].includes(module) && <label>Échéance<input type="datetime-local" value={scheduledAt} onChange={(event) => setScheduledAt(event.target.value)} /></label>}{module === 'prescriptions' && <><label>Identifiant patient *<input required value={patientId} onChange={(event) => setPatientId(event.target.value)} placeholder="UUID du patient" /></label><label>Identifiant prescripteur *<input required value={prescriberId} onChange={(event) => setPrescriberId(event.target.value)} placeholder="UUID du personnel médical" /></label></>}<label>Statut<select value={status} onChange={(event) => setStatus(event.target.value)}><option value="ACTIVE">Actif</option><option value="DRAFT">Brouillon</option><option value="PLANNED">Planifiée</option><option value="IN_PROGRESS">En cours</option><option value="DELIVERED">Livrée</option><option value="PAID">Payée</option><option value="ARCHIVED">Archivé</option></select></label><p className="form-grid__full form-help">Les champs métier complémentaires sont disponibles dans les onglets Analyses, Soins spéciaux et Notes.</p></div>}{tab === 'analysis' && <div className="workflow-panel"><div className="workflow-panel__intro"><ClipboardCheck /><div><strong>Workflow des analyses</strong><span>Suivez les étapes de prescription, prélèvement, validation et archivage.</span></div></div>{['Demande enregistrée', 'Prélèvement planifié', 'Résultat contrôlé', 'Résultat transmis au patient'].map((step, index) => <label className="workflow-step" key={step}><input type="checkbox" defaultChecked={index === 0} /><span className="workflow-step__number">{index + 1}</span><span><strong>{step}</strong><small>Responsable, date et pièce jointe obligatoires</small></span></label>)}<p className="workflow-panel__hint"><FilePlus2 /> Ajoutez la pièce jointe depuis la gestion documentaire après l’enregistrement du workflow.</p></div>}{tab === 'care' && <div className="workflow-panel"><div className="workflow-panel__intro workflow-panel__intro--coral"><HeartPulse /><div><strong>Soins spéciaux</strong><span>Définissez les précautions et consignes visibles par l’équipe.</span></div></div><div className="care-checks"><label><input type="checkbox" /> Allergie ou intolérance</label><label><input type="checkbox" /> Mobilité réduite</label><label><input type="checkbox" /> Isolement requis</label><label><input type="checkbox" /> Matériel spécifique</label></div><label className="form-grid__full">Consignes de soins<textarea rows={4} placeholder="Précautions, fréquence, matériel, personne à prévenir…" /></label></div>}{tab === 'notes' && <div className="notes-panel"><label>Notes et remarques<textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={7} placeholder="Ajoutez les observations utiles à l’équipe…" /></label><div className="notes-panel__hint"><History /> Chaque modification est historisée et associée à votre utilisateur.</div></div>}{error && <div className="form-error" role="alert"><CircleAlert />{error}</div>}<div className="dialog__footer"><button type="button" className="btn btn-secondary" onClick={onClose}>{t('Annuler')}</button><button type="submit" className="btn btn-primary" disabled={pending}>{pending ? <LoaderCircle className="spin" /> : <Save />} {pending ? 'Enregistrement…' : t('Enregistrer')}</button></div></form></section></div>;
+}
+
+function displayValue(value: unknown) {
+  if (value === null || value === undefined || value === '') return '—';
+  if (value instanceof Date) return value.toLocaleString('fr-FR');
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
 }
 
 function RecordDetailsDialog({ record, config, t, onClose }: { record: ModuleRecord; config: Config; t: (value: string) => string; onClose: () => void }) {
-  return <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}><section className="dialog glass-panel" role="dialog" aria-modal="true" aria-labelledby="record-details-title" onMouseDown={(event) => event.stopPropagation()}><div className="dialog__header"><div><div className="eyebrow">Consultation</div><h2 id="record-details-title">{titleOf(record)}</h2><p>{record.id ? `Identifiant ${record.id}` : 'Donnée de démonstration persistée dans ce navigateur.'}</p></div><button className="icon-button" aria-label={t('Fermer')} onClick={onClose}><X /></button></div><div className="dialog__body detail-list">{config.columns.map((column, index) => <div className="detail-row" key={column}><span className="detail-row__icon"><FileText /></span><div><div className="detail-row__label">{t(column)}</div><div className="detail-row__value">{(record.row[index] ?? '—').replaceAll('|', ' · ')}</div></div></div>)}</div><div className="dialog__footer"><button className="btn btn-primary" onClick={onClose}><Check /> {t('Fermer')}</button></div></section></div>;
+  const rawFields = Object.entries(record.data ?? {}).filter(([key, value]) => !['id', 'createdAt', 'updatedAt', 'deletedAt'].includes(key) && (typeof value !== 'object' || value === null)).slice(0, 10);
+  return <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}><section className="dialog glass-panel" role="dialog" aria-modal="true" aria-labelledby="record-details-title" onMouseDown={(event) => event.stopPropagation()}><div className="dialog__header"><div><div className="eyebrow">Consultation détaillée</div><h2 id="record-details-title">{titleOf(record)}</h2><p>{record.id ? `Identifiant ${record.id}` : 'Donnée de démonstration persistée dans ce navigateur.'}</p></div><button className="icon-button" type="button" aria-label={t('Fermer')} onClick={onClose}><X /></button></div><div className="dialog__body detail-list">{config.columns.map((column, index) => <div className="detail-row" key={`column-${column}`}><span className="detail-row__icon"><FileText /></span><div><div className="detail-row__label">{t(column)}</div><div className="detail-row__value">{(record.row[index] ?? '—').replaceAll('|', ' · ')}</div></div></div>)}{rawFields.map(([key, value]) => <div className="detail-row" key={`raw-${key}`}><span className="detail-row__icon"><ClipboardList /></span><div><div className="detail-row__label">{key}</div><div className="detail-row__value">{displayValue(value)}</div></div></div>)}{record.deletionReason && <div className="detail-row"><span className="detail-row__icon is-danger"><Trash2 /></span><div><div className="detail-row__label">Motif de retrait</div><div className="detail-row__value">{record.deletionReason}</div></div></div>}</div><div className="dialog__footer"><button className="btn btn-primary" type="button" onClick={onClose}><Check /> {t('Fermer')}</button></div></section></div>;
+}
+
+function DeleteConfirmDialog({ record, t, onClose, onConfirm }: { record: ModuleRecord; t: (value: string) => string; onClose: () => void; onConfirm: (reason: string) => void }) {
+  const [reason, setReason] = useState('');
+  const title = titleOf(record);
+  return <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}><section className="dialog glass-panel delete-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-dialog-title" onMouseDown={(event) => event.stopPropagation()}><div className="dialog__header"><div><div className="eyebrow">Suppression protégée</div><h2 id="delete-dialog-title">Retirer « {title} » ?</h2><p>L’élément sera déplacé vers la corbeille. La suppression définitive nécessite une confirmation séparée.</p></div><button className="icon-button" type="button" aria-label={t('Fermer')} onClick={onClose}><X /></button></div><div className="dialog__body delete-dialog__body"><div className="delete-summary"><Trash2 /><div><strong>{title}</strong><span>{record.row[0]?.split('|')[1] ?? 'Élément métier'}</span></div></div><label>Motif ou remarque facultative<textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={3} placeholder="Motif de retrait, correction ou demande de suppression…" /></label><div className="form-error form-error--warning"><CircleAlert /> La suppression est logique : l’élément pourra être restauré depuis la corbeille.</div></div><div className="dialog__footer"><button className="btn btn-secondary" type="button" onClick={onClose}>{t('Annuler')}</button><button className="btn btn-danger" type="button" onClick={() => onConfirm(reason)}><Trash2 /> Confirmer le retrait</button></div></section></div>;
 }
 
 function TrashDialog({ items, t, onClose, onRestore, onEmpty }: { items: ModuleRecord[]; t: (value: string) => string; onClose: () => void; onRestore: (record: ModuleRecord) => void; onEmpty: () => void }) {
   return <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}><section className="dialog glass-panel trash-dialog" role="dialog" aria-modal="true" aria-labelledby="trash-dialog-title" onMouseDown={(event) => event.stopPropagation()}><div className="dialog__header"><div><div className="eyebrow">Récupération</div><h2 id="trash-dialog-title">{t('Corbeille')}</h2><p>Les éléments peuvent être restaurés avant suppression définitive.</p></div><button className="icon-button" aria-label={t('Fermer')} onClick={onClose}><X /></button></div>{items.length === 0 ? <div className="trash-empty"><Trash2 /><h3>{t('Aucune entrée dans la corbeille.')}</h3><p>Les suppressions et archivages apparaîtront ici.</p></div> : <div className="trash-list">{items.map((record) => <div className="trash-item" key={recordKey(record)}><div className="action-icon action-icon--delete"><Trash2 /></div><div><strong>{titleOf(record)}</strong><span>{record.row[0]?.split('|')[1] ?? 'Élément archivé'}</span></div><button className="btn btn-secondary" onClick={() => onRestore(record)}><RotateCcw /> {t('Restaurer')}</button></div>)}</div>}<div className="dialog__footer"><button className="btn btn-secondary" onClick={onClose}>{t('Fermer')}</button>{items.length > 0 && <button className="btn btn-danger" onClick={onEmpty}><Trash2 /> Vider la corbeille</button>}</div></section></div>;
 }
 
-function PatientDrawer({ patient, canEdit, onClose, onNotify, onEdit }: { patient: string; canEdit: boolean; onClose: () => void; onNotify: (message: string) => void; onEdit: () => void }) {
-  const [name, code, age, initials] = patient.split('|');
-  return <div className="drawer-backdrop" onClick={onClose}><aside className="patient-drawer" onClick={(event) => event.stopPropagation()}><div className="drawer-head"><div className="patient-cell"><span className="patient-cell__avatar drawer-avatar">{initials}</span><div><div className="patient-cell__name">{name}</div><div className="patient-cell__code">{code} · {age}</div></div></div><div className="drawer-head__actions"><button className="icon-button action-icon action-icon--edit" aria-label="Modifier" title={canEdit ? 'Modifier' : 'Modification non autorisée'} disabled={!canEdit} onClick={onEdit}><FilePenLine /></button><button className="icon-button" aria-label="Fermer" onClick={onClose}><X /></button></div></div><div className="drawer-body"><div className="status status--active">Dossier actif</div><div className="drawer-section"><div className="drawer-label">Prochaine intervention</div><div className="drawer-highlight"><CalendarIcon /><div><strong>Consultation cardiologie</strong><span>24 octobre · 09:00 · Dr. Sofia Martin</span></div></div></div><div className="drawer-section"><div className="drawer-label">Résumé clinique</div><p className="drawer-copy">Suivi régulier. Les éléments importants du dossier et les allergies connues sont visibles ici.</p></div><div className="drawer-section"><div className="drawer-label">Accès rapides</div><div className="drawer-actions"><Link href="/prescriptions" onClick={onClose}><Syringe /> Ordonnance</Link><Link href="/documents" onClick={onClose}><FilePlus2 /> Document</Link><Link href={`/patients/${code}#audit`} onClick={() => { onNotify('Historique du dossier ouvert'); onClose(); }}><ClipboardList /> Historique</Link></div></div><Link className="btn btn-primary w-full" href={`/patients/${code}`} onClick={onClose}>Ouvrir le dossier complet <ArrowRight /></Link></div></aside></div>;
+function PatientDrawer({ record, canEdit, onClose, onNotify, onEdit }: { record: ModuleRecord; canEdit: boolean; onClose: () => void; onNotify: (message: string) => void; onEdit: () => void }) {
+  const [name, code, age, initials] = (record.row[0] ?? '').split('|');
+  const data = record.data ?? {};
+  const phone = String(data.phone ?? 'Téléphone non renseigné');
+  const email = String(data.email ?? 'E-mail non renseigné');
+  const notes = String(data.notes ?? 'Aucune remarque clinique renseignée.');
+  return <div className="drawer-backdrop" onClick={onClose}><aside className="patient-drawer" onClick={(event) => event.stopPropagation()}><div className="drawer-head"><div className="patient-cell"><span className="patient-cell__avatar drawer-avatar">{initials}</span><div><div className="patient-cell__name">{name}</div><div className="patient-cell__code">{code} · {age}</div></div></div><div className="drawer-head__actions"><button className="icon-button action-icon action-icon--edit" aria-label="Modifier" title={canEdit ? 'Modifier' : 'Modification non autorisée'} disabled={!canEdit} onClick={onEdit}><FilePenLine /></button><button className="icon-button" aria-label="Fermer" onClick={onClose}><X /></button></div></div><div className="drawer-body"><div className="status status--active">{String(data.status ?? 'ACTIVE') === 'ARCHIVED' ? 'Dossier archivé' : 'Dossier actif'}</div><div className="drawer-section"><div className="drawer-label">Coordonnées</div><div className="drawer-contact"><span><PhoneIcon /> {phone}</span><span><MailIcon /> {email}</span></div></div><div className="drawer-section"><div className="drawer-label">Résumé clinique</div><p className="drawer-copy">{notes}</p></div><div className="drawer-section"><div className="drawer-label">Prochaine intervention</div><div className="drawer-highlight"><CalendarIcon /><div><strong>Consultation cardiologie</strong><span>24 octobre · 09:00 · Dr. Sofia Martin</span></div></div></div><div className="drawer-section"><div className="drawer-label">Accès rapides</div><div className="drawer-actions"><Link href="/prescriptions" onClick={onClose}><Syringe /> Ordonnance</Link><Link href="/documents" onClick={onClose}><FilePlus2 /> Document</Link><Link href={`/patients/${code}#audit`} onClick={() => { onNotify('Historique du dossier ouvert'); onClose(); }}><ClipboardList /> Historique</Link></div></div><Link className="btn btn-primary w-full" href={`/patients/${code}`} onClick={onClose}>Ouvrir le dossier complet <ArrowRight /></Link></div></aside></div>;
 }
+
+function PhoneIcon() { return <Phone aria-hidden="true" />; }
+function MailIcon() { return <Mail aria-hidden="true" />; }
 
 function CalendarIcon() { return <div className="drawer-icon"><ScanLine /></div>; }
 
