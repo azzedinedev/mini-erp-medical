@@ -1,0 +1,4 @@
+{
+  "common": { "search": "Buscar", "save": "Guardar", "cancel": "Cancelar", "export": "Exportar", "active": "Activo" },
+  "dashboard": { "greeting": "Buenos días, Sofía", "subtitle": "Esto es lo que ocurre hoy en su clínica.", "overview": "Resumen" }
+}

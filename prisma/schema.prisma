@@ -1,0 +1,758 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+  ARCHIVED
+}
+
+enum StaffType {
+  DOCTOR
+  NURSE
+  TECHNICIAN
+  COORDINATOR
+  OTHER
+}
+
+enum Gender {
+  FEMALE
+  MALE
+  NON_BINARY
+  UNKNOWN
+}
+
+enum ReferenceKind {
+  CONSULTATION
+  NURSING
+}
+
+enum PatientStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum ConsultationStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum PrescriptionStatus {
+  DRAFT
+  SIGNED
+  DISPENSED
+  CANCELLED
+}
+
+enum StockMovementType {
+  IN
+  OUT
+  ADJUSTMENT
+  RETURN
+}
+
+enum DeliveryStatus {
+  PENDING
+  IN_PROGRESS
+  DELIVERED
+  CANCELLED
+}
+
+enum MissionStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum FinancialStatus {
+  DRAFT
+  ISSUED
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+}
+
+enum DocumentEntityType {
+  PATIENT
+  CONSULTATION
+  PRESCRIPTION
+  MISSION
+  DELIVERY
+  INVENTORY
+  FINANCIAL
+  STAFF
+  PARTNER
+  OTHER
+}
+
+model User {
+  id                 String       @id @default(uuid()) @db.Uuid
+  email              String       @unique @db.VarChar(255)
+  passwordHash       String       @map("password_hash") @db.VarChar(255)
+  firstName          String       @map("first_name") @db.VarChar(100)
+  lastName           String       @map("last_name") @db.VarChar(100)
+  phone              String?      @db.VarChar(40)
+  avatarUrl          String?      @map("avatar_url") @db.VarChar(500)
+  locale             String       @default("fr") @db.VarChar(5)
+  theme              String       @default("light") @db.VarChar(40)
+  status             UserStatus   @default(ACTIVE)
+  totpSecret         String?      @map("totp_secret") @db.VarChar(255)
+  totpEnabled        Boolean      @default(false) @map("totp_enabled")
+  lastLoginAt        DateTime?    @map("last_login_at") @db.Timestamptz(3)
+  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt          DateTime?    @map("deleted_at") @db.Timestamptz(3)
+  roles              UserRole[]
+  refreshTokens      RefreshToken[]
+  createdPatients    Patient[]    @relation("PatientCreatedBy")
+  updatedPatients    Patient[]    @relation("PatientUpdatedBy")
+  auditEvents        AuditEvent[]
+  signedPrescriptions Prescription[] @relation("PrescriptionSigner")
+  createdMissions    Mission[]    @relation("MissionCreatedBy")
+  createdDocuments   Document[]  @relation("DocumentCreatedBy")
+  medicalStaff       MedicalStaff?
+  signatures         PrescriptionSignature[]
+
+  @@index([status, deletedAt])
+  @@index([lastName, firstName])
+  @@map("users")
+}
+
+model Role {
+  id          String           @id @default(uuid()) @db.Uuid
+  name        String           @unique @db.VarChar(100)
+  description String?          @db.VarChar(500)
+  isSystem    Boolean          @default(false) @map("is_system")
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  users       UserRole[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  userId String @map("user_id") @db.Uuid
+  roleId String @map("role_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  id        String   @id @default(uuid()) @db.Uuid
+  roleId    String   @map("role_id") @db.Uuid
+  module    String   @db.VarChar(80)
+  action    String   @db.VarChar(30)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, module, action])
+  @@index([module, action])
+  @@map("role_permissions")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tokenHash String   @unique @map("token_hash") @db.VarChar(255)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@map("refresh_tokens")
+}
+
+model Patient {
+  id                String            @id @default(uuid()) @db.Uuid
+  code              String            @unique @db.VarChar(30)
+  firstName         String            @map("first_name") @db.VarChar(100)
+  lastName          String            @map("last_name") @db.VarChar(100)
+  preferredName     String?           @map("preferred_name") @db.VarChar(100)
+  birthDate         DateTime?         @map("birth_date") @db.Date
+  gender            Gender            @default(UNKNOWN)
+  nationalId        String?           @map("national_id") @db.VarChar(100)
+  phone             String?           @db.VarChar(40)
+  email             String?           @db.VarChar(255)
+  address           Json?
+  emergencyContact  Json?             @map("emergency_contact")
+  medicalHistory    Json?             @map("medical_history")
+  allergies         Json?
+  notes             String?           @db.Text
+  status            PatientStatus     @default(ACTIVE)
+  createdById       String?           @map("created_by_id") @db.Uuid
+  updatedById       String?           @map("updated_by_id") @db.Uuid
+  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt         DateTime?         @map("deleted_at") @db.Timestamptz(3)
+  archivedAt        DateTime?         @map("archived_at") @db.Timestamptz(3)
+  createdBy         User?             @relation("PatientCreatedBy", fields: [createdById], references: [id])
+  updatedBy         User?             @relation("PatientUpdatedBy", fields: [updatedById], references: [id])
+  contacts          PatientContact[]
+  locations         PatientLocation[]
+  actions           PatientAction[]
+  consultations     Consultation[]
+  prescriptions     Prescription[]
+  missions          Mission[]
+  documents         Document[]
+  auditEvents       AuditEvent[]
+  financialLines    FinancialLine[]
+  financialDocuments FinancialDocument[]
+
+  @@index([lastName, firstName])
+  @@index([status, deletedAt])
+  @@index([phone])
+  @@map("patients")
+}
+
+model PatientContact {
+  id          String   @id @default(uuid()) @db.Uuid
+  patientId   String   @map("patient_id") @db.Uuid
+  kind        String   @db.VarChar(40)
+  name        String   @db.VarChar(150)
+  relationship String? @db.VarChar(80)
+  phone       String?  @db.VarChar(40)
+  email       String?  @db.VarChar(255)
+  isPrimary   Boolean  @default(false) @map("is_primary")
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, isPrimary])
+  @@map("patient_contacts")
+}
+
+model CareLocation {
+  id          String            @id @default(uuid()) @db.Uuid
+  name        String            @db.VarChar(150)
+  kind        String            @db.VarChar(50)
+  address     Json?
+  phone       String?           @db.VarChar(40)
+  notes       String?           @db.Text
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  patientLinks PatientLocation[]
+
+  @@index([kind, name])
+  @@map("care_locations")
+}
+
+model PatientLocation {
+  id          String       @id @default(uuid()) @db.Uuid
+  patientId   String       @map("patient_id") @db.Uuid
+  locationId  String       @map("location_id") @db.Uuid
+  startedAt   DateTime     @map("started_at") @db.Timestamptz(3)
+  endedAt     DateTime?    @map("ended_at") @db.Timestamptz(3)
+  isCurrent   Boolean      @default(true) @map("is_current")
+  notes       String?      @db.Text
+  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  location    CareLocation @relation(fields: [locationId], references: [id])
+
+  @@index([patientId, isCurrent])
+  @@map("patient_locations")
+}
+
+model MedicalStaff {
+  id             String         @id @default(uuid()) @db.Uuid
+  userId         String?        @unique @map("user_id") @db.Uuid
+  staffType      StaffType      @map("staff_type")
+  firstName      String         @map("first_name") @db.VarChar(100)
+  lastName       String         @map("last_name") @db.VarChar(100)
+  specialty      String?        @db.VarChar(150)
+  licenseNumber  String?        @unique @map("license_number") @db.VarChar(100)
+  phone          String?        @db.VarChar(40)
+  email          String?        @db.VarChar(255)
+  availability   Json?
+  coordinates    Json?
+  isActive       Boolean        @default(true) @map("is_active")
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt      DateTime?      @map("deleted_at") @db.Timestamptz(3)
+  user           User?          @relation(fields: [userId], references: [id])
+  consultations  Consultation[]
+  prescriptions  Prescription[]
+  actions        PatientAction[]
+  missions       Mission[]
+
+  @@index([staffType, isActive])
+  @@index([lastName, firstName])
+  @@map("medical_staff")
+}
+
+model Partner {
+  id           String       @id @default(uuid()) @db.Uuid
+  code         String       @unique @db.VarChar(30)
+  name         String       @db.VarChar(180)
+  kind         String       @db.VarChar(80)
+  contactName  String?      @map("contact_name") @db.VarChar(150)
+  email        String?      @db.VarChar(255)
+  phone        String?      @db.VarChar(40)
+  address      Json?
+  notes        String?      @db.Text
+  isActive     Boolean      @default(true) @map("is_active")
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt    DateTime?    @map("deleted_at") @db.Timestamptz(3)
+  missions     Mission[]
+  deliveries   Delivery[]
+  financialDocs FinancialDocument[]
+  documents    Document[]
+
+  @@index([name])
+  @@index([kind, isActive])
+  @@map("partners")
+}
+
+model ReferenceType {
+  id             String          @id @default(uuid()) @db.Uuid
+  kind           ReferenceKind
+  code           String          @unique @db.VarChar(50)
+  labels         Json
+  icon           String?         @db.VarChar(60)
+  color          String?         @db.VarChar(20)
+  description    String?         @db.Text
+  defaultDuration Int?           @map("default_duration")
+  active         Boolean         @default(true)
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  archivedAt     DateTime?       @map("archived_at") @db.Timestamptz(3)
+  consultations  Consultation[]
+  actions        PatientAction[]
+  financialLines FinancialLine[]
+
+  @@index([kind, active])
+  @@map("reference_types")
+}
+
+model Medication {
+  id           String             @id @default(uuid()) @db.Uuid
+  code         String             @unique @db.VarChar(50)
+  name         String             @db.VarChar(180)
+  molecule     String?            @db.VarChar(180)
+  form         String?            @db.VarChar(100)
+  dosage       String?            @db.VarChar(100)
+  unit         String?            @db.VarChar(40)
+  active       Boolean            @default(true)
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  archivedAt   DateTime?          @map("archived_at") @db.Timestamptz(3)
+  prescriptionItems PrescriptionItem[]
+
+  @@index([name, molecule])
+  @@index([active])
+  @@map("medications")
+}
+
+model Consultation {
+  id            String           @id @default(uuid()) @db.Uuid
+  code          String           @unique @db.VarChar(30)
+  patientId     String           @map("patient_id") @db.Uuid
+  typeId        String           @map("type_id") @db.Uuid
+  practitionerId String          @map("practitioner_id") @db.Uuid
+  scheduledAt   DateTime         @map("scheduled_at") @db.Timestamptz(3)
+  endedAt       DateTime?        @map("ended_at") @db.Timestamptz(3)
+  status        ConsultationStatus @default(PLANNED)
+  notes         String?          @db.Text
+  structuredData Json?           @map("structured_data")
+  patient       Patient          @relation(fields: [patientId], references: [id])
+  type          ReferenceType    @relation(fields: [typeId], references: [id])
+  practitioner  MedicalStaff     @relation(fields: [practitionerId], references: [id])
+  documents     Document[]
+  patientAction PatientAction?
+  financialLine FinancialLine?
+
+  @@index([patientId, scheduledAt])
+  @@index([practitionerId, scheduledAt])
+  @@index([status, scheduledAt])
+  @@map("consultations")
+}
+
+model PatientAction {
+  id             String        @id @default(uuid()) @db.Uuid
+  patientId      String        @map("patient_id") @db.Uuid
+  typeId         String?       @map("type_id") @db.Uuid
+  practitionerId String?       @map("practitioner_id") @db.Uuid
+  consultationId String?       @unique @map("consultation_id") @db.Uuid
+  missionId      String?       @map("mission_id") @db.Uuid
+  prescriptionId String?       @unique @map("prescription_id") @db.Uuid
+  occurredAt     DateTime      @map("occurred_at") @db.Timestamptz(3)
+  status         String        @db.VarChar(40)
+  summary        String        @db.Text
+  details        Json?
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  updatedById    String?       @map("updated_by_id") @db.Uuid
+  patient        Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  type           ReferenceType? @relation(fields: [typeId], references: [id])
+  practitioner   MedicalStaff? @relation(fields: [practitionerId], references: [id])
+  consultation   Consultation? @relation(fields: [consultationId], references: [id])
+  mission        Mission?      @relation(fields: [missionId], references: [id])
+  prescription   Prescription? @relation(fields: [prescriptionId], references: [id])
+
+  @@index([patientId, occurredAt])
+  @@index([typeId, occurredAt])
+  @@map("patient_actions")
+}
+
+model Prescription {
+  id              String             @id @default(uuid()) @db.Uuid
+  code            String             @unique @db.VarChar(30)
+  patientId       String             @map("patient_id") @db.Uuid
+  prescriberId    String             @map("prescriber_id") @db.Uuid
+  status          PrescriptionStatus @default(DRAFT)
+  issuedAt        DateTime?          @map("issued_at") @db.Timestamptz(3)
+  validUntil      DateTime?          @map("valid_until") @db.Timestamptz(3)
+  instructions    String?            @db.Text
+  structuredText  Json?              @map("structured_text")
+  verificationToken String?          @unique @map("verification_token") @db.VarChar(100)
+  signedById      String?            @map("signed_by_id") @db.Uuid
+  signedAt        DateTime?          @map("signed_at") @db.Timestamptz(3)
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt       DateTime?          @map("deleted_at") @db.Timestamptz(3)
+  patient         Patient            @relation(fields: [patientId], references: [id])
+  prescriber      MedicalStaff       @relation(fields: [prescriberId], references: [id])
+  signedBy        User?              @relation("PrescriptionSigner", fields: [signedById], references: [id])
+  items           PrescriptionItem[]
+  signatures      PrescriptionSignature[]
+  documents       Document[]
+  patientAction   PatientAction?
+
+  @@index([patientId, createdAt])
+  @@index([status, issuedAt])
+  @@map("prescriptions")
+}
+
+model PrescriptionItem {
+  id            String       @id @default(uuid()) @db.Uuid
+  prescriptionId String      @map("prescription_id") @db.Uuid
+  medicationId  String?      @map("medication_id") @db.Uuid
+  manualName    String?      @map("manual_name") @db.VarChar(180)
+  dosage        String?      @db.VarChar(100)
+  route         String?      @db.VarChar(100)
+  frequency     String?      @db.VarChar(100)
+  duration      String?      @db.VarChar(100)
+  instructions  String?      @db.Text
+  sortOrder     Int          @default(0) @map("sort_order")
+  prescription  Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  medication    Medication?  @relation(fields: [medicationId], references: [id])
+
+  @@index([prescriptionId, sortOrder])
+  @@map("prescription_items")
+}
+
+model PrescriptionSignature {
+  id             String       @id @default(uuid()) @db.Uuid
+  prescriptionId String       @map("prescription_id") @db.Uuid
+  signerId       String       @map("signer_id") @db.Uuid
+  imageKey       String       @map("image_key") @db.VarChar(500)
+  format         String       @db.VarChar(20)
+  signedAt       DateTime     @default(now()) @map("signed_at") @db.Timestamptz(3)
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  signer         User         @relation(fields: [signerId], references: [id])
+
+  @@index([prescriptionId, signedAt])
+  @@map("prescription_signatures")
+}
+
+model InventoryItem {
+  id           String          @id @default(uuid()) @db.Uuid
+  code         String          @unique @db.VarChar(30)
+  sku          String?         @unique @db.VarChar(80)
+  name         String          @db.VarChar(180)
+  category     String?         @db.VarChar(100)
+  description  String?         @db.Text
+  unit         String          @db.VarChar(30)
+  quantity     Decimal         @default(0) @db.Decimal(14, 3)
+  minQuantity  Decimal         @default(0) @map("min_quantity") @db.Decimal(14, 3)
+  location     String?         @db.VarChar(120)
+  barcode      String?         @unique @db.VarChar(120)
+  active       Boolean         @default(true)
+  metadata     Json?
+  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt    DateTime?       @map("deleted_at") @db.Timestamptz(3)
+  movements    StockMovement[]
+  documents    Document[]
+
+  @@index([name, category])
+  @@index([quantity, minQuantity])
+  @@map("inventory_items")
+}
+
+model StockMovement {
+  id            String            @id @default(uuid()) @db.Uuid
+  inventoryItemId String          @map("inventory_item_id") @db.Uuid
+  type          StockMovementType
+  quantity      Decimal           @db.Decimal(14, 3)
+  reason        String?           @db.VarChar(255)
+  reference     String?           @db.VarChar(100)
+  performedById String?           @map("performed_by_id") @db.Uuid
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  inventoryItem InventoryItem     @relation(fields: [inventoryItemId], references: [id])
+
+  @@index([inventoryItemId, createdAt])
+  @@map("stock_movements")
+}
+
+model Mission {
+  id            String         @id @default(uuid()) @db.Uuid
+  code          String         @unique @db.VarChar(30)
+  title         String         @db.VarChar(180)
+  patientId     String?        @map("patient_id") @db.Uuid
+  partnerId     String?        @map("partner_id") @db.Uuid
+  assignedToId  String?        @map("assigned_to_id") @db.Uuid
+  scheduledAt   DateTime       @map("scheduled_at") @db.Timestamptz(3)
+  status        MissionStatus  @default(PLANNED)
+  address       Json?
+  coordinates   Json?
+  notes         String?        @db.Text
+  estimatedCost Decimal?       @map("estimated_cost") @db.Decimal(14, 2)
+  createdById   String?        @map("created_by_id") @db.Uuid
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt     DateTime?      @map("deleted_at") @db.Timestamptz(3)
+  patient       Patient?       @relation(fields: [patientId], references: [id])
+  partner       Partner?       @relation(fields: [partnerId], references: [id])
+  assignedTo    MedicalStaff?  @relation(fields: [assignedToId], references: [id])
+  createdBy     User?          @relation("MissionCreatedBy", fields: [createdById], references: [id])
+  deliveries    DeliveryMission[]
+  actions       PatientAction[]
+  documents     Document[]
+  financialLine FinancialLine?
+
+  @@index([scheduledAt, status])
+  @@index([assignedToId, scheduledAt])
+  @@index([patientId, scheduledAt])
+  @@map("missions")
+}
+
+model Delivery {
+  id            String           @id @default(uuid()) @db.Uuid
+  code          String           @unique @db.VarChar(30)
+  partnerId     String?          @map("partner_id") @db.Uuid
+  status        DeliveryStatus   @default(PENDING)
+  scheduledAt   DateTime?        @map("scheduled_at") @db.Timestamptz(3)
+  deliveredAt   DateTime?        @map("delivered_at") @db.Timestamptz(3)
+  address       Json?
+  trackingNote  String?          @map("tracking_note") @db.Text
+  qrToken       String?          @unique @map("qr_token") @db.VarChar(100)
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt     DateTime?        @map("deleted_at") @db.Timestamptz(3)
+  partner       Partner?         @relation(fields: [partnerId], references: [id])
+  missions      DeliveryMission[]
+  documents     Document[]
+  financialLine FinancialLine?
+
+  @@index([status, scheduledAt])
+  @@map("deliveries")
+}
+
+model DeliveryMission {
+  deliveryId String   @map("delivery_id") @db.Uuid
+  missionId  String   @map("mission_id") @db.Uuid
+  delivery   Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  mission    Mission  @relation(fields: [missionId], references: [id], onDelete: Cascade)
+
+  @@id([deliveryId, missionId])
+  @@map("delivery_missions")
+}
+
+model Document {
+  id             String             @id @default(uuid()) @db.Uuid
+  code           String             @unique @db.VarChar(30)
+  entityType     DocumentEntityType @map("entity_type")
+  category       String             @db.VarChar(100)
+  title          String             @db.VarChar(255)
+  fileName       String             @map("file_name") @db.VarChar(255)
+  mimeType       String             @map("mime_type") @db.VarChar(120)
+  storageKey     String             @map("storage_key") @db.VarChar(500)
+  sizeBytes      BigInt             @map("size_bytes")
+  checksum       String?            @db.VarChar(128)
+  metadata       Json?
+  contentText    String?            @map("content_text") @db.Text
+  patientId      String?            @map("patient_id") @db.Uuid
+  consultationId String?            @map("consultation_id") @db.Uuid
+  prescriptionId String?            @map("prescription_id") @db.Uuid
+  missionId      String?            @map("mission_id") @db.Uuid
+  deliveryId     String?            @map("delivery_id") @db.Uuid
+  inventoryItemId String?           @map("inventory_item_id") @db.Uuid
+  partnerId      String?            @map("partner_id") @db.Uuid
+  financialDocumentId String?       @map("financial_document_id") @db.Uuid
+  expenseId      String?            @map("expense_id") @db.Uuid
+  createdById    String             @map("created_by_id") @db.Uuid
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt      DateTime?          @map("deleted_at") @db.Timestamptz(3)
+  patient        Patient?           @relation(fields: [patientId], references: [id])
+  consultation   Consultation?      @relation(fields: [consultationId], references: [id])
+  prescription   Prescription?      @relation(fields: [prescriptionId], references: [id])
+  mission        Mission?           @relation(fields: [missionId], references: [id])
+  delivery       Delivery?          @relation(fields: [deliveryId], references: [id])
+  inventoryItem  InventoryItem?     @relation(fields: [inventoryItemId], references: [id])
+  partner        Partner?           @relation(fields: [partnerId], references: [id])
+  financialDocument FinancialDocument? @relation(fields: [financialDocumentId], references: [id])
+  expense        Expense?            @relation(fields: [expenseId], references: [id])
+  createdBy      User               @relation("DocumentCreatedBy", fields: [createdById], references: [id])
+  versions       DocumentVersion[]
+
+  @@index([entityType, category, createdAt])
+  @@index([patientId, createdAt])
+  @@index([prescriptionId])
+  @@map("documents")
+}
+
+model DocumentVersion {
+  id          String   @id @default(uuid()) @db.Uuid
+  documentId  String   @map("document_id") @db.Uuid
+  version     Int
+  storageKey  String   @map("storage_key") @db.VarChar(500)
+  sizeBytes   BigInt   @map("size_bytes")
+  checksum    String?  @db.VarChar(128)
+  changeNote  String?  @map("change_note") @db.Text
+  createdById String   @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, version])
+  @@map("document_versions")
+}
+
+model FinancialDocument {
+  id            String          @id @default(uuid()) @db.Uuid
+  code          String          @unique @db.VarChar(30)
+  kind          String          @db.VarChar(40)
+  partnerId     String?         @map("partner_id") @db.Uuid
+  patientId     String?         @map("patient_id") @db.Uuid
+  currency      String          @default("EUR") @db.VarChar(3)
+  status        FinancialStatus @default(DRAFT)
+  subtotalHt    Decimal         @default(0) @map("subtotal_ht") @db.Decimal(14, 2)
+  discountRate  Decimal         @default(0) @map("discount_rate") @db.Decimal(6, 3)
+  discountValue Decimal         @default(0) @map("discount_value") @db.Decimal(14, 2)
+  vatTotal      Decimal         @default(0) @map("vat_total") @db.Decimal(14, 2)
+  totalTtc      Decimal         @default(0) @map("total_ttc") @db.Decimal(14, 2)
+  amountInWords String?         @map("amount_in_words") @db.Text
+  issuedAt      DateTime?       @map("issued_at") @db.Timestamptz(3)
+  dueAt         DateTime?       @map("due_at") @db.Timestamptz(3)
+  paidAt        DateTime?       @map("paid_at") @db.Timestamptz(3)
+  notes         String?         @db.Text
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt     DateTime?       @map("deleted_at") @db.Timestamptz(3)
+  partner       Partner?       @relation(fields: [partnerId], references: [id])
+  patient       Patient?       @relation(fields: [patientId], references: [id])
+  lines         FinancialLine[]
+  expenses      Expense[]
+  documents     Document[]
+
+  @@index([status, issuedAt])
+  @@index([partnerId, createdAt])
+  @@map("financial_documents")
+}
+
+model FinancialLine {
+  id                 String           @id @default(uuid()) @db.Uuid
+  financialDocumentId String          @map("financial_document_id") @db.Uuid
+  label              String           @db.VarChar(255)
+  quantity           Decimal          @default(1) @db.Decimal(12, 3)
+  unitPriceHt        Decimal          @map("unit_price_ht") @db.Decimal(14, 2)
+  discountRate       Decimal          @default(0) @map("discount_rate") @db.Decimal(6, 3)
+  discountValue      Decimal          @default(0) @map("discount_value") @db.Decimal(14, 2)
+  baseHt             Decimal          @map("base_ht") @db.Decimal(14, 2)
+  vatRate            Decimal          @default(0) @map("vat_rate") @db.Decimal(6, 3)
+  vatBase            Decimal          @default(0) @map("vat_base") @db.Decimal(14, 2)
+  vatAmount          Decimal          @default(0) @map("vat_amount") @db.Decimal(14, 2)
+  totalTtc           Decimal          @map("total_ttc") @db.Decimal(14, 2)
+  referenceTypeId    String?          @map("reference_type_id") @db.Uuid
+  patientId          String?          @map("patient_id") @db.Uuid
+  consultationId    String?          @unique @map("consultation_id") @db.Uuid
+  missionId          String?          @unique @map("mission_id") @db.Uuid
+  deliveryId         String?          @unique @map("delivery_id") @db.Uuid
+  document           FinancialDocument @relation(fields: [financialDocumentId], references: [id], onDelete: Cascade)
+  referenceType      ReferenceType?   @relation(fields: [referenceTypeId], references: [id])
+  patient            Patient?         @relation(fields: [patientId], references: [id])
+  consultation       Consultation?   @relation(fields: [consultationId], references: [id])
+  mission            Mission?         @relation(fields: [missionId], references: [id])
+  delivery           Delivery?        @relation(fields: [deliveryId], references: [id])
+
+  @@index([financialDocumentId])
+  @@map("financial_lines")
+}
+
+model Expense {
+  id                 String            @id @default(uuid()) @db.Uuid
+  category           String            @db.VarChar(100)
+  label              String            @db.VarChar(255)
+  amountHt           Decimal           @map("amount_ht") @db.Decimal(14, 2)
+  vatRate            Decimal           @default(0) @map("vat_rate") @db.Decimal(6, 3)
+  vatBase            Decimal           @default(0) @map("vat_base") @db.Decimal(14, 2)
+  vatAmount          Decimal           @default(0) @map("vat_amount") @db.Decimal(14, 2)
+  amountTtc          Decimal           @map("amount_ttc") @db.Decimal(14, 2)
+  currency           String            @default("EUR") @db.VarChar(3)
+  incurredAt         DateTime          @map("incurred_at") @db.Date
+  financialDocumentId String?          @map("financial_document_id") @db.Uuid
+  notes              String?           @db.Text
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt          DateTime?         @map("deleted_at") @db.Timestamptz(3)
+  financialDocument  FinancialDocument? @relation(fields: [financialDocumentId], references: [id])
+  documents          Document[]
+
+  @@index([category, incurredAt])
+  @@map("expenses")
+}
+
+model SystemSetting {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique @db.VarChar(150)
+  value       Json
+  description String?  @db.Text
+  isSecret    Boolean  @default(false) @map("is_secret")
+  updatedById String?  @map("updated_by_id") @db.Uuid
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("system_settings")
+}
+
+model AuditEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @map("actor_id") @db.Uuid
+  patientId  String?  @map("patient_id") @db.Uuid
+  action     String   @db.VarChar(80)
+  entityType String   @map("entity_type") @db.VarChar(80)
+  entityId   String   @map("entity_id") @db.VarChar(80)
+  before     Json?
+  after      Json?
+  metadata   Json?
+  ipAddress  String?  @map("ip_address") @db.VarChar(64)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  actor      User?    @relation(fields: [actorId], references: [id])
+  patient    Patient? @relation(fields: [patientId], references: [id])
+
+  @@index([patientId, createdAt])
+  @@index([entityType, entityId, createdAt])
+  @@map("audit_events")
+}
+
+model CodeSequence {
+  id          String   @id @default(uuid()) @db.Uuid
+  prefix      String   @unique @db.VarChar(12)
+  nextValue   Int      @default(1) @map("next_value")
+  padding     Int      @default(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("code_sequences")
+}
