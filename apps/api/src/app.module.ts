@@ -40,6 +40,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     DocumentsModule,
     FinanceModule,
     SettingsModule,
+    DashboardModule,
   ],
 })
 export class AppModule {}
