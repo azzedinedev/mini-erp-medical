@@ -383,7 +383,31 @@ export function ModuleView({ module }: { module: ModuleKey }) {
 
 function ActionSheet({ module, record, t, can, onClose, onView, onEdit, onArchive, onDelete }: { module: ModuleKey; record: ModuleRecord; t: (value: string) => string; can: (action: Action) => boolean; onClose: () => void; onView: () => void; onEdit: () => void; onArchive: () => void; onDelete: () => void }) {
   const title = titleOf(record);
-  return <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}><section className="action-sheet glass-panel" role="dialog" aria-modal="true" aria-labelledby="action-sheet-title" onMouseDown={(event) => event.stopPropagation()}><div className="dialog__header"><div><div className="eyebrow">Actions</div><h2 id="action-sheet-title">{title}</h2><p>Chaque action est validée par l’API et respecte les permissions de votre session.</p></div><button className="icon-button" aria-label={t('Fermer')} onClick={onClose}><X /></button></div><div className="action-grid">{can('view') && <button className="action-tile action-tile--view" onClick={onView}><ClipboardCheck /><span>{t('Consulter')}</span><small>Ouvrir la fiche détaillée</small></button>}{can('update') && <button className="action-tile action-tile--edit" onClick={onEdit}><FilePenLine /><span>{t('Modifier')}</span><small>Éditer avec validation</small></button>}{['patients', 'team', 'partners', 'users'].includes(module) && can('archive') && <button className="action-tile action-tile--archive" onClick={onArchive}><Archive /><span>{t('Archiver')}</span><small>Retirer des listes actives</small></button>}{can('delete') && <button className="action-tile action-tile--delete" onClick={onDelete}><Trash2 /><span>{t('Supprimer')}</span><small>Déplacer vers la corbeille</small></button>}</div></section></div>;
+  const archiveModules = ['patients', 'team', 'partners', 'users'];
+  const actionItems = [
+    { key: 'view' as const, label: t('Consulter'), description: 'Ouvrir la fiche détaillée', icon: ClipboardCheck, onClick: onView, allowed: can('view'), tone: 'action-tile--view' },
+    { key: 'update' as const, label: t('Modifier'), description: 'Éditer avec validation', icon: FilePenLine, onClick: onEdit, allowed: can('update'), tone: 'action-tile--edit' },
+    ...(archiveModules.includes(module) ? [{ key: 'archive' as const, label: t('Archiver'), description: 'Retirer des listes actives', icon: Archive, onClick: onArchive, allowed: can('archive'), tone: 'action-tile--archive' }] : []),
+    ...(archiveModules.includes(module) && module !== 'patients' ? [] : [{ key: 'delete' as const, label: t('Supprimer'), description: 'Déplacer vers la corbeille', icon: Trash2, onClick: onDelete, allowed: can('delete'), tone: 'action-tile--delete' }]),
+  ];
+  const allowedCount = actionItems.filter((item) => item.allowed).length;
+
+  return <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}>
+    <section className="action-sheet glass-panel" role="dialog" aria-modal="true" aria-labelledby="action-sheet-title" onMouseDown={(event) => event.stopPropagation()}>
+      <div className="dialog__header">
+        <div><div className="eyebrow">Actions</div><h2 id="action-sheet-title">{title}</h2><p>Chaque action est validée par l’API et respecte les permissions de votre session.</p></div>
+        <button className="icon-button" type="button" aria-label={t('Fermer')} onClick={onClose}><X /></button>
+      </div>
+      <div className="action-grid">
+        {actionItems.map(({ key, label, description, icon: ActionIcon, onClick, allowed, tone }) => <button key={key} type="button" className={`action-tile ${tone} ${allowed ? '' : 'is-disabled'}`} disabled={!allowed} aria-disabled={!allowed} title={allowed ? label : 'Permission non accordée'} onClick={allowed ? onClick : undefined}>
+          {allowed ? <ActionIcon /> : <LockKeyhole />}
+          <span>{label}</span>
+          <small>{allowed ? description : 'Permission non accordée pour votre rôle'}</small>
+        </button>)}
+      </div>
+      {allowedCount === 0 && <div className="action-sheet__notice"><LockKeyhole /> Votre session ne possède aucune permission d’action sur cet enregistrement. Rechargez vos permissions ou contactez un administrateur.</div>}
+    </section>
+  </div>;
 }
 
 function CrudDialog({ module, config, mode, initial, t, onClose, onSave }: { module: ModuleKey; config: Config; mode: 'create' | 'edit'; initial?: ModuleRecord; t: (value: string) => string; onClose: () => void; onSave: (mode: 'create' | 'edit', draft: CrudDraft) => Promise<void> | void }) {

@@ -4,7 +4,8 @@ export const ACCESS_TOKEN_KEY = 'mediflow.accessToken';
 export const REFRESH_TOKEN_KEY = 'mediflow.refreshToken';
 export const SESSION_EVENT = 'mediflow-auth-changed';
 
-type SessionRole = { id?: string; name?: string; permissions?: string[] };
+type SessionPermission = string | { module?: string; action?: string };
+type SessionRole = { id?: string; name?: string; permissions?: SessionPermission[] };
 
 export type StoredSession = {
   accessToken: string;
@@ -46,14 +47,19 @@ export function clearSession() {
   window.localStorage.removeItem(ACCESS_TOKEN_KEY);
   window.localStorage.removeItem(REFRESH_TOKEN_KEY);
   window.localStorage.removeItem('mediflow.user');
+  // The access cookie is HttpOnly; clear it through the same-origin route as
+  // soon as a session is rejected or explicitly removed.
+  void window.fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => undefined);
   window.dispatchEvent(new CustomEvent(SESSION_EVENT));
 }
 
 export function hasPermission(module: ModuleKey, action: PermissionAction, session = readSession()): boolean {
-  if (!session) return false;
-  if (!session.user?.roles?.length) return false;
+  if (!session?.user?.roles?.length) return false;
   const permission = `${module}:${action}`;
-  return session.user.roles.some((role) => role.permissions?.includes(permission));
+  return session.user.roles.some((role) => (role.permissions ?? []).some((value) => {
+    if (typeof value === 'string') return value === permission;
+    return value.module === module && value.action === action;
+  }));
 }
 
 export function userDisplayName(session = readSession()): string {

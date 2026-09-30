@@ -11,8 +11,8 @@ import {
 } from 'lucide-react';
 import { navGroups } from '@/lib/module-config';
 import { useUiLocale, type UiLocale } from '@/lib/ui-i18n';
-import { apiClient } from '@/lib/api-client';
-import { clearSession, readSession, SESSION_EVENT, storeSession, userDisplayName } from '@/lib/auth-store';
+import { apiClient, ApiClientError } from '@/lib/api-client';
+import { clearSession, readSession, SESSION_EVENT, storeSession, userDisplayName, type StoredSession } from '@/lib/auth-store';
 
 const iconMap: Record<string, LucideIcon> = {
   LayoutDashboard, FolderHeart, MapPinned, Truck, Syringe, Package, Files, Stethoscope,
@@ -37,16 +37,54 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [authReady, setAuthReady] = useState(false);
   const [globalSearch, setGlobalSearch] = useState('');
   useEffect(() => {
-    const syncSession = () => {
-      const session = readSession();
+    let active = true;
+    const applySession = (session: StoredSession | null) => {
+      if (!active) return;
       setAuthenticated(Boolean(session));
       setDisplayName(userDisplayName(session));
-      setAuthReady(true);
+    };
+    const onSessionChanged = () => {
+      const session = readSession();
+      applySession(session);
       if (!session) router.replace('/login');
     };
-    syncSession();
-    window.addEventListener(SESSION_EVENT, syncSession);
-    return () => window.removeEventListener(SESSION_EVENT, syncSession);
+
+    async function validateSession() {
+      const session = readSession();
+      if (!session) {
+        if (active) {
+          setAuthenticated(false);
+          setAuthReady(true);
+          router.replace('/login');
+        }
+        return;
+      }
+
+      try {
+        const principal = await apiClient.get<NonNullable<StoredSession['user']>>('/auth/me');
+        const current = readSession();
+        if (current) storeSession({ ...current, user: principal });
+        applySession(current ? { ...current, user: principal } : null);
+      } catch (error) {
+        if (error instanceof ApiClientError && error.status === 401) {
+          clearSession();
+          if (active) router.replace('/login');
+        } else {
+          // Keep the shell visible during a temporary API outage; every business
+          // request will still fail closed instead of using local demo data.
+          applySession(readSession());
+        }
+      } finally {
+        if (active) setAuthReady(true);
+      }
+    }
+
+    void validateSession();
+    window.addEventListener(SESSION_EVENT, onSessionChanged);
+    return () => {
+      active = false;
+      window.removeEventListener(SESSION_EVENT, onSessionChanged);
+    };
   }, [router]);
   const session = readSession();
   const roleLabel = session?.user?.roles?.map((role) => role.name).filter(Boolean).join(' · ') || 'Rôle non renseigné';
@@ -64,6 +102,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   function changeLocale() {
     const locales: UiLocale[] = ['fr', 'en', 'es', 'ar'];
     setLocale(locales[(locales.indexOf(locale) + 1) % locales.length] ?? 'fr');
+  }
+
+  function logout() {
+    clearSession();
+    router.replace('/login');
   }
 
   return (
@@ -112,7 +155,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </header>
         <main className="page-fade">{children}</main>
       </div>
-      {profileOpen && <ProfileDialog onClose={() => setProfileOpen(false)} onLogout={() => { clearSession(); router.replace('/login'); }} />}
+      {profileOpen && <ProfileDialog onClose={() => setProfileOpen(false)} onLogout={() => { void logout(); }} />}
     </div>
   );
 }

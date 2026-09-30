@@ -16,6 +16,7 @@ async function main() {
   await Promise.all(permissions.map((permission) => prisma.rolePermission.upsert({ where: { roleId_module_action: { roleId: adminRole.id, module: permission.module, action: permission.action } }, create: { roleId: adminRole.id, ...permission }, update: {} })));
   const passwordHash = await bcrypt.hash('ChangeMe!2025', 12);
   const admin = await prisma.user.upsert({ where: { email: 'admin@mediflow.local' }, create: { email: 'admin@mediflow.local', passwordHash, firstName: 'Sofia', lastName: 'Martin', roles: { create: { roleId: adminRole.id } } }, update: {} });
+  await prisma.userRole.upsert({ where: { userId_roleId: { userId: admin.id, roleId: adminRole.id } }, create: { userId: admin.id, roleId: adminRole.id }, update: {} });
   await prisma.codeSequence.createMany({ data: [{ prefix: 'PAT' }, { prefix: 'ORD' }, { prefix: 'INV' }, { prefix: 'LIV' }, { prefix: 'MIS' }, { prefix: 'DOC' }, { prefix: 'FAC' }, { prefix: 'PAR' }, { prefix: 'MED' }], skipDuplicates: true });
   const consultationTypes = [
     { code: 'CONSULT-GEN', labels: { fr: 'Consultation générale', en: 'General consultation', ar: 'استشارة عامة', es: 'Consulta general' }, icon: 'Stethoscope', color: '#2c8a82' },

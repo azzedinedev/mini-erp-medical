@@ -1,11 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, Eye, EyeOff, Fingerprint, Languages, LockKeyhole, ShieldCheck } from 'lucide-react';
 import { ApiClientError, apiClient } from '@/lib/api-client';
-import { readSession, storeSession } from '@/lib/auth-store';
+import { storeSession } from '@/lib/auth-store';
 
 type LoginResponse = {
   requiresTwoFactor?: boolean;
@@ -23,10 +23,6 @@ export default function LoginPage() {
   const [totpCode, setTotpCode] = useState('');
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (readSession()) router.replace('/');
-  }, [router]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

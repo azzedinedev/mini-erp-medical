@@ -109,6 +109,8 @@ Les routes de corbeille sont disponibles par exemple sur `GET /api/patients/tras
 
 Le frontend ne conserve pas de copie métier locale : une création, une édition, une suppression logique, une restauration ou une suppression définitive n’est considérée comme réussie qu’après confirmation de l’API. En cas d’indisponibilité, l’action reste visible comme erreur et les données ne sont pas inventées. En production, ne désactivez pas les permissions RBAC et ne donnez `delete_permanent` qu’aux rôles de supervision.
 
+Après cette initialisation, déconnectez-vous puis reconnectez-vous afin de recharger les permissions depuis `GET /api/auth/me`. Si la base existait déjà, relancez `npm run db:seed` : le seed rattache aussi le compte administrateur existant au rôle Administrateur et réinstalle ses permissions CRUD.
+
 ## Variables et sécurité
 
 Toutes les valeurs sensibles sont dans `.env` (voir `.env.example`). Les mots de passe sont hashés en bcrypt (coût 12), les access tokens JWT sont courts et les refresh tokens sont hachés en base et révocables. Turnstile est désactivé par défaut et activable via `CAPTCHA_PROVIDER` ou `SystemSetting`. La politique TOTP globale (`disabled`, `optional`, `required`) est configurable.

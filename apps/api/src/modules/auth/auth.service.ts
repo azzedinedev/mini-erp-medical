@@ -61,6 +61,25 @@ export class AuthService {
     return { accessToken, refreshToken, user: principal };
   }
 
+  async me(userId: string): Promise<AuthPrincipal> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { roles: { include: { role: { include: { permissions: true } } } } },
+    });
+    if (!user || user.status !== 'ACTIVE' || user.deletedAt) throw new UnauthorizedException('Session invalide');
+    return {
+      sub: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      roles: user.roles.map(({ role }) => ({
+        id: role.id,
+        name: role.name,
+        permissions: role.permissions.map((permission) => `${permission.module}:${permission.action}`),
+      })),
+    };
+  }
+
   async refresh(refreshToken: string): Promise<{ accessToken: string }> {
     let payload: { sub?: string; type?: string };
     try {

@@ -24,7 +24,7 @@ export class AuthController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @Get('me')
-  me(@Req() request: RequestWithUser) {
-    return request.user;
+  async me(@Req() request: RequestWithUser) {
+    return this.auth.me(request.user.sub);
   }
 }
