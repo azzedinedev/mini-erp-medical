@@ -233,6 +233,8 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .pagination button:hover:not(:disabled), .pagination button.is-current { color: var(--brand); border-color: var(--line); background: var(--brand-soft); }
 .sync-status { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px; color: var(--muted); border-bottom: 1px solid var(--line); font-size: 11px; }
 .sync-status svg { width: 16px; height: 16px; color: var(--brand); }
+.sync-status--error { color: var(--coral); background: color-mix(in srgb, var(--coral) 7%, transparent); }
+.sync-status--error svg { color: var(--coral); }
 .spin { animation: spin .85s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .empty-state { display: grid; place-items: center; min-height: 230px; padding: 30px; text-align: center; }

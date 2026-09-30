@@ -13,6 +13,8 @@ apps/api/uploads/
 apps/api/storage/
 apps/desktop/release/
 prisma/dev.db
+.arena-pg/
+.arena-storage/
 
 *.tsbuildinfo
 /storage/

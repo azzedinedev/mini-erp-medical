@@ -173,7 +173,7 @@ export async function loadModuleTrash(module: ModuleKey): Promise<ModuleRecord[]
       }
       case 'settings': return null;
     }
-  } catch {
-    return null;
+  } catch (error) {
+    throw error;
   }
 }

@@ -1,12 +1,15 @@
 import path from 'node:path';
 import dotenv from 'dotenv';
-import { PrismaClient, ReferenceKind } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient, ReferenceKind } from '@prisma/client/wasm';
+import { Pool } from 'pg';
 import bcrypt from 'bcryptjs';
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
 
-const prisma = new PrismaClient();
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 const permissionActions = ['view', 'create', 'update', 'delete', 'delete_permanent', 'archive', 'export'];
 const modules = ['patients', 'prescriptions', 'inventory', 'deliveries', 'missions', 'documents', 'medical-staff', 'partners', 'users', 'references', 'finance', 'settings'];
 
@@ -35,4 +38,12 @@ async function main() {
   console.log(`Seed terminé pour ${admin.email}`);
 }
 
-main().catch((error) => { console.error(error); process.exitCode = 1; }).finally(() => prisma.$disconnect());
+main()
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+    await pool.end();
+  });

@@ -34,7 +34,10 @@ export class InventoryService {
   async removePermanently(id: string) {
     const item = await this.prisma.inventoryItem.findUnique({ where: { id }, select: { id: true } });
     if (!item) throw new NotFoundException('Article introuvable');
-    return this.prisma.inventoryItem.delete({ where: { id } });
+    return this.prisma.$transaction(async (tx) => {
+      await tx.stockMovement.deleteMany({ where: { inventoryItemId: id } });
+      return tx.inventoryItem.delete({ where: { id } });
+    });
   }
 
   restore(id: string) { return this.prisma.inventoryItem.update({ where: { id }, data: { deletedAt: null, active: true } }); }

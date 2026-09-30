@@ -8,6 +8,7 @@
     "packages/*"
   ],
   "scripts": {
+    "postinstall": "node scripts/generate-prisma-offline.js",
     "dev": "npm run dev --workspace=@mediflow/web",
     "dev:api": "npm run start:dev --workspace=@mediflow/api",
     "dev:desktop": "npm run dev --workspace=@mediflow/desktop",
@@ -16,8 +17,9 @@
     "build:api": "npm run build --workspace=@mediflow/api",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "db:generate": "npx prisma generate --schema prisma/schema.prisma",
-    "db:migrate": "npx prisma migrate dev --schema prisma/schema.prisma",
+    "test:crud": "node scripts/smoke-crud.mjs",
+    "db:generate": "node scripts/generate-prisma-offline.js",
+    "db:migrate": "tsx apps/api/prisma/migrate.ts",
     "db:seed": "tsx apps/api/prisma/seed.ts",
     "db:studio": "npx prisma studio --schema prisma/schema.prisma"
   },
@@ -25,6 +27,7 @@
     "node": ">=20.0.0"
   },
   "devDependencies": {
+    "@prisma/internals": "^5.22.0",
     "@types/bcryptjs": "^2.4.6"
   }
 }

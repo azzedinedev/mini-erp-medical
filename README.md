@@ -25,7 +25,7 @@ prisma/
 
 Le résumé réel du tableau de bord est exposé par `GET /api/dashboard/summary?period=7` et agrège directement les patients, missions, ordonnances, stocks, actions et événements d’audit présents dans PostgreSQL.
 
-Chaque domaine suit `Controller → Service → PrismaRepository` (Prisma est encapsulé par `PrismaService`), DTOs validés avec `class-validator`, permissions déclaratives et soft-delete. Le schéma fournit `AuditEvent` pour le fil d’activité immuable des dossiers; les écrans n’affichent que les événements effectivement renvoyés par l’API.
+Chaque domaine suit `Controller → Service → PrismaRepository` (Prisma est encapsulé par `PrismaService`), DTOs validés avec `class-validator`, permissions déclaratives et soft-delete. En environnement local, Prisma utilise l’adaptateur PostgreSQL et son moteur WASM afin de fonctionner sans téléchargement de moteur natif. Le schéma fournit `AuditEvent` pour le fil d’activité immuable des dossiers; les écrans n’affichent que les événements effectivement renvoyés par l’API.
 
 ## Démarrage rapide
 
@@ -59,15 +59,7 @@ npm run db:migrate
 npm run db:seed
 ```
 
-Les scripts `db:*` sont exécutés depuis la racine afin de charger `.env`. Si vous lancez directement un script depuis `apps/api`, copiez également `.env` dans `apps/api/.env`.
-
-En développement, `prisma migrate dev` utilise une base temporaire dite shadow database. Le rôle PostgreSQL doit donc avoir le privilège `CREATEDB`. Connecté à PostgreSQL avec le rôle administrateur `postgres`, exécutez dans pgAdmin :
-
-```sql
-ALTER ROLE mediflow CREATEDB;
-```
-
-Le privilège peut être retiré après une migration locale avec `ALTER ROLE mediflow NOCREATEDB;`. En production, utilisez plutôt `prisma migrate deploy` avec un compte de migration dédié.
+Les scripts `db:*` sont exécutés depuis la racine afin de charger `.env`. Si vous lancez directement un script depuis `apps/api`, copiez également `.env` dans `apps/api/.env`. `db:generate` génère le client Prisma WASM localement et `db:migrate` applique les fichiers SQL versionnés dans PostgreSQL de façon idempotente, sans base shadow ni privilège `CREATEDB`. En production, exécutez cette migration avec un compte PostgreSQL dédié avant de démarrer l’API.
 
 Démarrez ensuite deux terminaux :
 
@@ -89,8 +81,9 @@ npm run dev:api       # NestJS en watch
 npm run dev           # Next.js
 npm run build         # build de tous les workspaces
 npm test              # tests unitaires
-npm run db:migrate    # migration Prisma
+npm run db:migrate    # migration SQL versionnée et idempotente
 npm run db:seed       # rôles, permissions et référentiels de départ
+npm run test:crud     # smoke test CRUD PostgreSQL avec nettoyage automatique
 npm run dev:desktop   # Electron après un build web
 ```
 
@@ -108,6 +101,12 @@ Une fois l’API et PostgreSQL démarrés, les écrans de modules chargent les d
 Les routes de corbeille sont disponibles par exemple sur `GET /api/patients/trash`, `GET /api/prescriptions/trash`, `GET /api/inventory/trash`, `GET /api/documents/trash` et leurs équivalents métier. Les référentiels utilisent `GET /api/reference-data/types/trash` et `GET /api/reference-data/medications/trash`. Le seed crée la permission `delete_permanent` pour le rôle administrateur ; relancez `npm run db:seed` après une évolution des permissions.
 
 Le frontend ne conserve pas de copie métier locale : une création, une édition, une suppression logique, une restauration ou une suppression définitive n’est considérée comme réussie qu’après confirmation de l’API. En cas d’indisponibilité, l’action reste visible comme erreur et les données ne sont pas inventées. En production, ne désactivez pas les permissions RBAC et ne donnez `delete_permanent` qu’aux rôles de supervision.
+
+### Diagnostic d’exécution
+
+- `npm run db:migrate` identifie une erreur d’infrastructure PostgreSQL (URL absente, connexion refusée ou schéma impossible à appliquer) avant le démarrage métier ; `npm run db:seed` doit ensuite terminer avec succès.
+- `npm run test:crud` se connecte avec un bearer JWT, crée puis relit les enregistrements dans chaque domaine, teste les mutations et restaure/supprime définitivement ses données de test automatiquement. Un échec d’authentification, d’endpoint ou de contrainte PostgreSQL est rapporté séparément du build.
+- Dans l’interface, `Données indisponibles` signifie une erreur API/session ; `Aucune donnée enregistrée` signifie que l’API a répondu avec une liste vide. Ces deux états ne sont pas remplacés par des données de démonstration.
 
 Après cette initialisation, déconnectez-vous puis reconnectez-vous afin de recharger les permissions depuis `GET /api/auth/me`. Si la base existait déjà, relancez `npm run db:seed` : le seed rattache aussi le compte administrateur existant au rôle Administrateur et réinstalle ses permissions CRUD.
 

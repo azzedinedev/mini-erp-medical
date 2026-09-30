@@ -66,6 +66,16 @@ function statusCode(value: string) {
   return value || 'ACTIVE';
 }
 
+function runtimeErrorMessage(error: unknown) {
+  if (error instanceof ApiClientError) {
+    if (error.status === 401) return 'Session expirée : reconnectez-vous pour charger les données métier.';
+    if (error.status === 403) return 'API accessible, mais permissions insuffisantes pour ce module. Vérifiez votre rôle RBAC.';
+    if (error.status >= 500) return `API accessible, mais le service ou PostgreSQL a renvoyé une erreur (${error.status}). Consultez les logs de l’API.`;
+    return `L’API a refusé cette lecture (${error.status}) : ${error.message}`;
+  }
+  return 'API ou PostgreSQL indisponible : vérifiez la connexion, la migration et le démarrage du serveur.';
+}
+
 export function ModuleView({ module }: { module: ModuleKey }) {
   const config = moduleConfigs[module];
   const Icon = icons[config.icon] ?? ClipboardList;
@@ -80,12 +90,13 @@ export function ModuleView({ module }: { module: ModuleKey }) {
   const [selected, setSelected] = useState<ModuleRecord | null>(null);
   const [editor, setEditor] = useState<{ mode: 'create' | 'edit'; record?: ModuleRecord } | null>(null);
   const [actionRecord, setActionRecord] = useState<ModuleRecord | null>(null);
-  const [deleteRecord, setDeleteRecord] = useState<ModuleRecord | null>(null);
+  const [deleteRecord, setDeleteRecord] = useState<{ record: ModuleRecord; mode: 'archive' | 'delete' } | null>(null);
   const [trashItems, setTrashItems] = useState<ModuleRecord[]>([]);
   const [trashOpen, setTrashOpen] = useState(false);
   const [records, setRecords] = useState<ModuleRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [trashError, setTrashError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const [page, setPage] = useState(1);
   const pageSize = 8;
@@ -101,13 +112,16 @@ export function ModuleView({ module }: { module: ModuleKey }) {
     setTrashItems([]);
     setLoading(true);
     setLoadError(null);
+    setTrashError(null);
     void loadModuleRecords(module).then((remote) => {
       if (active) setRecords(remote ?? []);
-    }).catch(() => {
-      if (active) setLoadError('Impossible de charger les données depuis l’API.');
+    }).catch((error) => {
+      if (active) setLoadError(runtimeErrorMessage(error));
     }).finally(() => { if (active) setLoading(false); });
     void loadModuleTrash(module).then((remoteTrash) => {
       if (active && remoteTrash) setTrashItems(remoteTrash);
+    }).catch((error) => {
+      if (active) setTrashError(runtimeErrorMessage(error));
     });
     return () => { active = false; };
   }, [config.tabs, initialQuery, module, reloadToken]);
@@ -266,9 +280,9 @@ export function ModuleView({ module }: { module: ModuleKey }) {
     }
   }
 
-  async function archiveRemote(record: ModuleRecord) {
+  async function archiveRemote(record: ModuleRecord, mode: 'archive' | 'delete') {
     if (!record.id || !record.remote) return;
-    if (module === 'patients' && can('archive') && !can('delete')) {
+    if (module === 'patients' && mode === 'archive') {
       await apiClient.post(`/patients/${record.id}/archive`, {});
       return;
     }
@@ -282,16 +296,20 @@ export function ModuleView({ module }: { module: ModuleKey }) {
     if (endpoint) await apiClient.delete(`/${endpoint}/${record.id}`);
   }
 
-  function requestDelete(record: ModuleRecord) {
-    if (!can('delete') && !can('archive')) { notify('Vous ne disposez pas de la permission de suppression.'); return; }
+  function requestRemoval(record: ModuleRecord, mode: 'archive' | 'delete') {
+    const permission = mode === 'archive' ? 'archive' : 'delete';
+    if (!can(permission)) {
+      notify(`Vous ne disposez pas de la permission ${permission === 'archive' ? 'd’archivage' : 'de suppression'}.`);
+      return;
+    }
     setActionRecord(null);
-    setDeleteRecord(record);
+    setDeleteRecord({ record, mode });
   }
 
-  async function moveToTrash(record: ModuleRecord) {
+  async function moveToTrash(record: ModuleRecord, mode: 'archive' | 'delete') {
     setActionRecord(null);
     try {
-      await archiveRemote(record);
+      await archiveRemote(record, mode);
       const [refreshed, refreshedTrash] = await Promise.all([loadModuleRecords(module), loadModuleTrash(module)]);
       if (!refreshed || !refreshedTrash) throw new Error('La corbeille n’a pas pu être resynchronisée.');
       setRecords(refreshed);
@@ -368,14 +386,15 @@ export function ModuleView({ module }: { module: ModuleKey }) {
   return <div className="page-container">
     <section className="page-heading"><div><div className="eyebrow">{t(config.eyebrow)}</div><h1>{t(config.title)}</h1><p>{t(config.description)}</p></div><div className="heading-actions"><button className="icon-button action-icon action-icon--trash" aria-label={t('Corbeille')} title={can('view') ? t('Corbeille') : 'Consultation non autorisée'} disabled={!can('view')} onClick={() => setTrashOpen(true)}><Trash2 />{trashItems.length > 0 && <span className="action-count">{trashItems.length}</span>}</button><button className="btn btn-secondary" onClick={exportCsv} disabled={!can('export')}><Download /> {t('Exporter')}</button><button className="btn btn-primary" onClick={openCreate} disabled={!can('create')}><Plus /><span>{t(config.primary)}</span></button></div></section>
     <section className="card module-list-card"><div className="module-toolbar"><div className="filter-search"><Search /><input value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder={`${t('Rechercher')} dans ${t(config.title).toLowerCase()}...`} aria-label={`${t('Rechercher')} dans ${t(config.title)}`} /></div><div className="filter-tabs">{config.tabs.map((tab) => <button type="button" className={`filter-tab ${activeTab === tab ? 'is-active' : ''}`} key={tab} onClick={() => { setActiveTab(tab); setPage(1); }}>{t(tab)}</button>)}</div><button type="button" className="btn btn-secondary" onClick={() => { setQuery(''); setActiveTab(config.tabs[0]); setPage(1); notify('Filtres réinitialisés'); }}><ListChecks /> {t('Filtres')}</button></div>
+      {trashError && <div className="sync-status sync-status--error"><CircleAlert /> Corbeille indisponible : {trashError}</div>}
       {loading && <div className="sync-status"><LoaderCircle className="spin" /> Chargement depuis PostgreSQL…</div>}
       {loadError && !loading ? <div className="empty-state empty-state--error"><div className="empty-state__icon"><CircleAlert /></div><h3>Données indisponibles</h3><p>{loadError}</p><button type="button" className="btn btn-secondary" onClick={() => setReloadToken((value) => value + 1)}><RotateCcw /> Réessayer</button></div> : !loading && visibleRecords.length === 0 ? <div className="empty-state"><div className="empty-state__icon"><Search /></div><h3>{query || activeTab !== config.tabs[0] ? 'Aucun résultat' : 'Aucune donnée enregistrée'}</h3><p>{query || activeTab !== config.tabs[0] ? 'Modifiez votre recherche ou vos filtres.' : 'Les enregistrements créés dans PostgreSQL apparaîtront ici.'}</p></div> : !loading && <div className="table-wrap"><table className="data-table"><thead><tr>{config.columns.map((column) => <th key={column}>{t(column)}</th>)}<th aria-label={t('Actions')}>{t('Actions')}</th></tr></thead><tbody>{visibleRecords.map((record) => <tr key={recordKey(record)} onClick={() => setSelected(record)} className="cursor-pointer"><td><PrimaryCell value={record.row[0] ?? ''} module={module} /></td>{record.row.slice(1).map((cell, cellIndex) => <td key={`${cell}-${cellIndex}`}>{cellIndex === record.row.length - 2 ? <Status value={cell} label={t(cell)} /> : (cell.includes('|') && ['prescriptions', 'missions', 'deliveries'].includes(module) && cellIndex === 0 ? <PrimaryCell value={cell} module="patients" /> : cell)}</td>)}<td><button type="button" className="icon-button action-icon action-icon--more" aria-label={`${t('Actions')} ${titleOf(record)}`} title={t('Actions')} onClick={(event) => { event.stopPropagation(); setActionRecord(record); }}><MoreHorizontal /></button></td></tr>)}</tbody></table></div>}
       <div className="table-footer"><span className="table-footer__count">{filtered.length} résultat{filtered.length > 1 ? 's' : ''} · source : PostgreSQL</span><div className="pagination"><button type="button" aria-label="Page précédente" disabled={page <= 1} onClick={() => setPageAndClamp(page - 1)}><ChevronLeft /></button><button type="button" className="is-current">{page}</button><button type="button" aria-label="Page suivante" disabled={page >= pageCount} onClick={() => setPageAndClamp(page + 1)}><ChevronRight /></button></div></div>
     </section>
     {selected && (module === 'patients' ? <PatientDrawer record={selected} canEdit={can('update')} canPrescriptions={hasPermission('prescriptions', 'view', readSession())} canDocuments={hasPermission('documents', 'view', readSession())} onClose={() => setSelected(null)} onNotify={notify} onEdit={() => { setSelected(null); openEdit(selected); }} /> : <RecordDetailsDialog record={selected} config={config} t={t} onClose={() => setSelected(null)} />)}
-    {actionRecord && <ActionSheet module={module} record={actionRecord} t={t} can={can} onClose={() => setActionRecord(null)} onView={() => { setSelected(actionRecord); setActionRecord(null); }} onEdit={() => openEdit(actionRecord)} onArchive={() => requestDelete(actionRecord)} onDelete={() => requestDelete(actionRecord)} />}
+    {actionRecord && <ActionSheet module={module} record={actionRecord} t={t} can={can} onClose={() => setActionRecord(null)} onView={() => { setSelected(actionRecord); setActionRecord(null); }} onEdit={() => openEdit(actionRecord)} onArchive={() => requestRemoval(actionRecord, 'archive')} onDelete={() => requestRemoval(actionRecord, 'delete')} />}
     {editor && <CrudDialog key={`${editor.mode}-${recordKey(editor.record ?? { row: ['new'] })}`} module={module} config={config} mode={editor.mode} initial={editor.record} t={t} onClose={() => setEditor(null)} onSave={(mode, draft) => saveRecord(mode, draft, editor.record)} />}
-    {deleteRecord && <DeleteConfirmDialog record={deleteRecord} t={t} onClose={() => setDeleteRecord(null)} onConfirm={() => { const record = deleteRecord; setDeleteRecord(null); moveToTrash(record); }} />}
+    {deleteRecord && <DeleteConfirmDialog record={deleteRecord.record} mode={deleteRecord.mode} t={t} onClose={() => setDeleteRecord(null)} onConfirm={() => { const pending = deleteRecord; setDeleteRecord(null); moveToTrash(pending.record, pending.mode); }} />}
     {trashOpen && <TrashDialog items={trashItems} t={t} canRestore={can('update')} canEmpty={can('delete_permanent')} onClose={() => setTrashOpen(false)} onRestore={restoreRecord} onEmpty={emptyTrash} />}
     {toast && <div className="toast" role="status"><CircleCheck />{toast}</div>}
   </div>;
@@ -462,9 +481,10 @@ function RecordDetailsDialog({ record, config, t, onClose }: { record: ModuleRec
   return <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}><section className="dialog glass-panel" role="dialog" aria-modal="true" aria-labelledby="record-details-title" onMouseDown={(event) => event.stopPropagation()}><div className="dialog__header"><div><div className="eyebrow">Consultation détaillée</div><h2 id="record-details-title">{titleOf(record)}</h2><p>{record.id ? `Identifiant API : ${record.id}` : 'Identifiant API indisponible.'}</p></div><button className="icon-button" type="button" aria-label={t('Fermer')} onClick={onClose}><X /></button></div><div className="dialog__body detail-list">{config.columns.map((column, index) => <div className="detail-row" key={`column-${column}`}><span className="detail-row__icon"><FileText /></span><div><div className="detail-row__label">{t(column)}</div><div className="detail-row__value">{(record.row[index] ?? '—').replaceAll('|', ' · ')}</div></div></div>)}{rawFields.map(([key, value]) => <div className="detail-row" key={`raw-${key}`}><span className="detail-row__icon"><ClipboardList /></span><div><div className="detail-row__label">{key}</div><div className="detail-row__value">{displayValue(value)}</div></div></div>)}{record.deletionReason && <div className="detail-row"><span className="detail-row__icon is-danger"><Trash2 /></span><div><div className="detail-row__label">Motif de retrait</div><div className="detail-row__value">{record.deletionReason}</div></div></div>}</div><div className="dialog__footer"><button className="btn btn-primary" type="button" onClick={onClose}><Check /> {t('Fermer')}</button></div></section></div>;
 }
 
-function DeleteConfirmDialog({ record, t, onClose, onConfirm }: { record: ModuleRecord; t: (value: string) => string; onClose: () => void; onConfirm: () => void }) {
+function DeleteConfirmDialog({ record, mode, t, onClose, onConfirm }: { record: ModuleRecord; mode: 'archive' | 'delete'; t: (value: string) => string; onClose: () => void; onConfirm: () => void }) {
   const title = titleOf(record);
-  return <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}><section className="dialog glass-panel delete-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-dialog-title" onMouseDown={(event) => event.stopPropagation()}><div className="dialog__header"><div><div className="eyebrow">Suppression protégée</div><h2 id="delete-dialog-title">Retirer « {title} » ?</h2><p>L’élément sera déplacé vers la corbeille. La suppression définitive nécessite une confirmation séparée.</p></div><button className="icon-button" type="button" aria-label={t('Fermer')} onClick={onClose}><X /></button></div><div className="dialog__body delete-dialog__body"><div className="delete-summary"><Trash2 /><div><strong>{title}</strong><span>{record.row[0]?.split('|')[1] ?? 'Élément métier'}</span></div></div><p className="delete-dialog__note">Aucune donnée métier locale n’est conservée : l’état du retrait est relu depuis l’API et exposé dans la corbeille.</p><div className="form-error form-error--warning"><CircleAlert /> La suppression est logique : l’élément pourra être restauré depuis la corbeille.</div></div><div className="dialog__footer"><button className="btn btn-secondary" type="button" onClick={onClose}>{t('Annuler')}</button><button className="btn btn-danger" type="button" onClick={onConfirm}><Trash2 /> Confirmer le retrait</button></div></section></div>;
+  const isArchive = mode === 'archive';
+  return <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}><section className="dialog glass-panel delete-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-dialog-title" onMouseDown={(event) => event.stopPropagation()}><div className="dialog__header"><div><div className="eyebrow">{isArchive ? 'Archivage protégé' : 'Suppression protégée'}</div><h2 id="delete-dialog-title">{isArchive ? `Archiver « ${title} » ?` : `Retirer « ${title} » ?`}</h2><p>{isArchive ? 'L’élément sera retiré des listes actives et restera disponible dans la corbeille.' : 'L’élément sera déplacé vers la corbeille. La suppression définitive nécessite une confirmation séparée.'}</p></div><button className="icon-button" type="button" aria-label={t('Fermer')} onClick={onClose}><X /></button></div><div className="dialog__body delete-dialog__body"><div className="delete-summary">{isArchive ? <Archive /> : <Trash2 />}<div><strong>{title}</strong><span>{record.row[0]?.split('|')[1] ?? 'Élément métier'}</span></div></div><p className="delete-dialog__note">Aucune donnée métier locale n’est conservée : l’état du retrait est relu depuis l’API et exposé dans la corbeille.</p><div className="form-error form-error--warning"><CircleAlert /> {isArchive ? 'L’archivage est réversible depuis la corbeille.' : 'La suppression est logique : l’élément pourra être restauré depuis la corbeille.'}</div></div><div className="dialog__footer"><button className="btn btn-secondary" type="button" onClick={onClose}>{t('Annuler')}</button><button className="btn btn-danger" type="button" onClick={onConfirm}>{isArchive ? <Archive /> : <Trash2 />} {isArchive ? 'Confirmer l’archivage' : 'Confirmer le retrait'}</button></div></section></div>;
 }
 
 function TrashDialog({ items, t, canRestore, canEmpty, onClose, onRestore, onEmpty }: { items: ModuleRecord[]; t: (value: string) => string; canRestore: boolean; canEmpty: boolean; onClose: () => void; onRestore: (record: ModuleRecord) => void; onEmpty: () => void }) {
